@@ -14,8 +14,8 @@ const app = express();
 
 
 const allowedOrigins = [
-  'https://tritotemfrontend.vercel.app',
   'https://tritotemfrontend-5e9ac3c82-tritotems-projects.vercel.app',
+  'http://localhost:3000'
 ];
 
 app.use(cors({
@@ -26,9 +26,7 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: 'GET,POST,PUT,DELETE,OPTIONS',
-  allowedHeaders: 'Content-Type,Authorization',
-  credentials: true,
+  credentials: true
 }));
 
 app.use(express.json());
