@@ -8,13 +8,12 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ✅ Pasta de uploads compatível com Heroku e local
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// ❌ REMOVIDO: Criação de pasta uploads aqui (isso será feito no server.js)
 
-// 🎥 Configuração do Multer para salvar vídeos
+// ✔️ Caminho para pasta de uploads já criada no server.js
+const uploadDir = path.resolve('uploads');
+
+// 🎥 Configuração do Multer
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
@@ -33,7 +32,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 } // 500MB
 });
 
-// 📦 GET /api/media - lista de mídias
+// 📦 GET /api/media - lista
 router.get('/', authenticate, async (_req, res) => {
   try {
     const medias = await Media.find().sort({ createdAt: -1 });
@@ -43,7 +42,7 @@ router.get('/', authenticate, async (_req, res) => {
   }
 });
 
-// ⬆️ POST /api/media - upload de vídeo
+// ⬆️ POST /api/media - upload
 router.post(
   '/',
   authenticate,
@@ -57,8 +56,6 @@ router.post(
       if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
 
       const { name } = req.body;
-
-      // Salva URL apontando para a rota de STREAM
       const url = `/stream/${file.filename}`;
 
       const media = new Media({
@@ -77,7 +74,7 @@ router.post(
   }
 );
 
-// 🔍 GET /api/media/:id - detalhe
+// 🔍 GET /api/media/:id
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);

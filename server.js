@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,7 +10,7 @@ const { Server } = require('socket.io');
 
 const app = express();
 
-// ✅ Configuração de CORS com origem liberada para Vercel e localhost
+// ✅ CORS para produção e dev
 const allowedOrigins = [
   'https://tritotemfrontend-liart.vercel.app',
   'http://localhost:3000'
@@ -17,7 +18,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permite requisições sem origin (ex: Postman) ou da lista segura
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -27,20 +27,20 @@ app.use(cors({
   credentials: true,
 }));
 
-// Middleware básico
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 🛠️ Criação segura da pasta uploads
+// 🛠 Cria a pasta uploads se não existir
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Servir arquivos estáticos (ex: imagens e vídeos)
+// Servir arquivos estáticos
 app.use('/uploads', express.static(uploadsDir));
 
-// HTTP + Socket.IO
+// HTTP + WebSocket
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -49,13 +49,13 @@ const io = new Server(server, {
   },
 });
 
-// Expõe o io em cada requisição
+// Disponibiliza io nas reqs
 app.use((req, _res, next) => {
   req.io = io;
   next();
 });
 
-// 🔗 Conexão com MongoDB
+// 🔗 Conexão MongoDB
 (async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
@@ -65,7 +65,7 @@ app.use((req, _res, next) => {
   }
 })();
 
-// 🎥 STREAM de vídeo com suporte a Range (video/mp4)
+// 🎥 STREAM com suporte a range
 app.get('/stream/:filename', (req, res) => {
   try {
     const filePath = path.join(uploadsDir, req.params.filename);
@@ -119,20 +119,18 @@ app.get('/stream/:filename', (req, res) => {
   }
 });
 
-// 📦 Rotas de API
+// Rotas
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/playlists', require('./routes/playlists'));
 app.use('/api/devices', require('./routes/devices'));
-
-// 🎮 Player individual
 app.use('/player', require('./routes/player'));
 
-// ✅ Healthcheck básico
+// Healthcheck
 app.get('/', (_req, res) => res.json({ message: 'API Tritotem funcionando!' }));
 
-// 🔌 Socket.IO conexões
+// WebSocket
 io.on('connection', (socket) => {
   console.log('🟢 Cliente conectado:', socket.id);
 
@@ -141,7 +139,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// 🚀 Inicia servidor
+// Iniciar servidor
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
