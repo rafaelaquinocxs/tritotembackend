@@ -7,18 +7,22 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
+const multer = require('multer');
 
 console.log('🚀 Iniciando servidor completo...');
 
 const app = express();
 
-// CORS configurado
+// ✅ CORS CORRIGIDO - Permite requisições da Vercel
 app.use(cors({
-  origin: '*',
+  origin: ['https://tritotemfrontend-liart.vercel.app', '*'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+// Middleware para OPTIONS preflight
+app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +37,32 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/uploads', express.static(uploadsDir));
 
 console.log('✅ Pasta uploads configurada');
+
+// Configuração do multer para upload
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|mp4|webm|ogg|avi|mov/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Tipo de arquivo não permitido'));
+  }
+});
 
 // WebSocket
 const server = http.createServer(app);
@@ -119,37 +149,74 @@ console.log('✅ Rota de stream configurada');
 
 // Healthcheck
 app.get('/', (req, res) => {
-  res.json({ message: 'API Tritotem funcionando!' });
+  res.json({ message: 'API Tritotem funcionando!', timestamp: new Date().toISOString() });
 });
 
 console.log('✅ Healthcheck configurado');
 
-// ✅ ROTAS INLINE (sem bcrypt por enquanto)
+// ✅ MODELOS MONGOOSE
 
-// Modelo User inline (sem hash de senha por enquanto)
+// Modelo User
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Senha em texto plano temporariamente
+  password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'content_manager'], default: 'content_manager' },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model('User', userSchema);
 
-// Middleware de auth simples (sem JWT por enquanto)
+// Modelo Media
+const mediaSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  filename: { type: String, required: true },
+  originalName: { type: String, required: true },
+  mimetype: { type: String, required: true },
+  size: { type: Number, required: true },
+  duration: { type: Number },
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Media = mongoose.model('Media', mediaSchema);
+
+// Modelo Playlist
+const playlistSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  description: { type: String },
+  media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Playlist = mongoose.model('Playlist', playlistSchema);
+
+// Modelo Device
+const deviceSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  deviceToken: { type: String, required: true, unique: true },
+  assignedPlaylistId: { type: mongoose.Schema.Types.ObjectId, ref: 'Playlist' },
+  status: { type: String, enum: ['online', 'offline'], default: 'offline' },
+  lastSeenAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Device = mongoose.model('Device', deviceSchema);
+
+// Middleware de auth simples
 const authenticateToken = (req, res, next) => {
   // Por enquanto, vamos pular a autenticação para testar
   req.user = { userId: 'test', email: 'test@test.com', role: 'admin' };
   next();
 };
 
-// Auth routes simplificadas
+// ✅ ROTAS DE AUTENTICAÇÃO
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Login simples sem hash
     const user = await User.findOne({ email, password });
     
     if (!user) {
@@ -177,7 +244,7 @@ app.post('/api/auth/init', async (req, res) => {
     const admin = new User({
       name,
       email,
-      password, // Senha em texto plano temporariamente
+      password,
       role: 'admin'
     });
 
@@ -203,17 +270,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 console.log('✅ Rotas AUTH configuradas');
 
-// DEVICE ROUTES
-const deviceSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  deviceToken: { type: String, required: true, unique: true },
-  assignedPlaylistId: { type: mongoose.Schema.Types.ObjectId, ref: 'Playlist' },
-  status: { type: String, enum: ['online', 'offline'], default: 'offline' },
-  lastSeenAt: { type: Date, default: Date.now },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Device = mongoose.model('Device', deviceSchema);
+// ✅ ROTAS DE DISPOSITIVOS
 
 app.get('/api/devices', authenticateToken, async (req, res) => {
   try {
@@ -233,6 +290,16 @@ app.post('/api/devices', authenticateToken, async (req, res) => {
     });
     await device.save();
     res.status(201).json(device);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/devices/:id', authenticateToken, async (req, res) => {
+  try {
+    const device = await Device.findById(req.params.id).populate('assignedPlaylistId');
+    if (!device) return res.status(404).json({ error: 'Dispositivo não encontrado' });
+    res.json(device);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -278,21 +345,22 @@ app.post('/api/devices/:id/heartbeat', async (req, res) => {
   }
 });
 
-console.log('✅ Rotas DEVICES configuradas');
-
-// MEDIA ROUTES
-const mediaSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  filename: { type: String, required: true },
-  originalName: { type: String, required: true },
-  mimetype: { type: String, required: true },
-  size: { type: Number, required: true },
-  duration: { type: Number },
-  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
+app.post('/api/devices/broadcast-assign', authenticateToken, async (req, res) => {
+  try {
+    const { playlistId } = req.body;
+    
+    await Device.updateMany({}, { assignedPlaylistId: playlistId || null });
+    
+    const devices = await Device.find().populate('assignedPlaylistId');
+    res.json({ message: 'Playlist atribuída a todos os dispositivos', devices });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-const Media = mongoose.model('Media', mediaSchema);
+console.log('✅ Rotas DEVICES configuradas');
+
+// ✅ ROTAS DE MÍDIA
 
 app.get('/api/media', authenticateToken, async (req, res) => {
   try {
@@ -303,18 +371,59 @@ app.get('/api/media', authenticateToken, async (req, res) => {
   }
 });
 
-console.log('✅ Rotas MEDIA configuradas');
+app.post('/api/media', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
 
-// PLAYLIST ROUTES
-const playlistSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  description: { type: String },
-  media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
+    const media = new Media({
+      name: req.body.name || req.file.originalname,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      uploadedBy: req.user.userId
+    });
+
+    await media.save();
+    res.status(201).json(media);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-const Playlist = mongoose.model('Playlist', playlistSchema);
+app.get('/api/media/:id', authenticateToken, async (req, res) => {
+  try {
+    const media = await Media.findById(req.params.id).populate('uploadedBy', 'name email');
+    if (!media) return res.status(404).json({ error: 'Mídia não encontrada' });
+    res.json(media);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/media/:id', authenticateToken, async (req, res) => {
+  try {
+    const media = await Media.findById(req.params.id);
+    if (!media) return res.status(404).json({ error: 'Mídia não encontrada' });
+
+    // Remove arquivo físico
+    const filePath = path.join(uploadsDir, media.filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await Media.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Mídia excluída com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+console.log('✅ Rotas MEDIA configuradas');
+
+// ✅ ROTAS DE PLAYLISTS
 
 app.get('/api/playlists', authenticateToken, async (req, res) => {
   try {
@@ -325,13 +434,73 @@ app.get('/api/playlists', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/playlists', authenticateToken, async (req, res) => {
+  try {
+    const { name, description, media } = req.body;
+    
+    const playlist = new Playlist({
+      name,
+      description,
+      media: media || [],
+      createdBy: req.user.userId
+    });
+
+    await playlist.save();
+    await playlist.populate('media');
+    res.status(201).json(playlist);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/playlists/:id', authenticateToken, async (req, res) => {
+  try {
+    const playlist = await Playlist.findById(req.params.id).populate('media').populate('createdBy', 'name email');
+    if (!playlist) return res.status(404).json({ error: 'Playlist não encontrada' });
+    res.json(playlist);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/playlists/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, description, media } = req.body;
+    
+    const playlist = await Playlist.findByIdAndUpdate(
+      req.params.id,
+      { name, description, media },
+      { new: true }
+    ).populate('media');
+
+    if (!playlist) return res.status(404).json({ error: 'Playlist não encontrada' });
+    res.json(playlist);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/playlists/:id', authenticateToken, async (req, res) => {
+  try {
+    const playlist = await Playlist.findByIdAndDelete(req.params.id);
+    if (!playlist) return res.status(404).json({ error: 'Playlist não encontrada' });
+    res.json({ message: 'Playlist excluída com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 console.log('✅ Rotas PLAYLISTS configuradas');
 
-// PLAYER ROUTE
+// ✅ ROTA DO PLAYER
+
 app.get('/player/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
-    const device = await Device.findOne({ deviceToken }).populate('assignedPlaylistId');
+    const device = await Device.findOne({ deviceToken }).populate({
+      path: 'assignedPlaylistId',
+      populate: { path: 'media' }
+    });
     
     if (!device) {
       return res.status(404).send(`
@@ -348,16 +517,23 @@ app.get('/player/:deviceToken', async (req, res) => {
         <body>
           <h1>❌ Dispositivo não encontrado</h1>
           <p>Token: ${deviceToken}</p>
+          <p>Verifique se o dispositivo foi cadastrado corretamente.</p>
         </body>
         </html>
       `);
     }
 
-    await Device.findByIdAndUpdate(device._id, { lastSeenAt: new Date(), status: 'online' });
+    // Atualiza status do dispositivo
+    await Device.findByIdAndUpdate(device._id, { 
+      lastSeenAt: new Date(), 
+      status: 'online' 
+    });
 
     const baseUrl = process.env.NODE_ENV === 'production' 
       ? 'https://tritotem-cc0a461d6f3e.herokuapp.com' 
       : 'http://localhost:3001';
+
+    const playlist = device.assignedPlaylistId?.media || [];
 
     const html = `
     <!DOCTYPE html>
@@ -369,20 +545,44 @@ app.get('/player/:deviceToken', async (req, res) => {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000; overflow: hidden; font-family: Arial; }
         video { width: 100vw; height: 100vh; object-fit: cover; }
-        .info { position: fixed; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 14px; z-index: 1000; }
+        .info { 
+          position: fixed; top: 10px; left: 10px; color: white; 
+          background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; 
+          font-size: 14px; z-index: 1000; 
+        }
+        .no-content {
+          display: flex; align-items: center; justify-content: center;
+          width: 100vw; height: 100vh; color: white; text-align: center;
+          background: linear-gradient(45deg, #1a1a1a, #333);
+        }
       </style>
     </head>
     <body>
       <div class="info">
         <div><strong>Dispositivo:</strong> ${device.name}</div>
         <div><strong>Status:</strong> <span id="status">Carregando...</span></div>
+        <div><strong>Playlist:</strong> ${device.assignedPlaylistId?.name || 'Nenhuma'}</div>
       </div>
-      <video id="player" autoplay muted loop>Seu navegador não suporta vídeo HTML5.</video>
+      
+      ${playlist.length === 0 ? `
+        <div class="no-content">
+          <div>
+            <h1>📺 Tritotem Player</h1>
+            <h2>${device.name}</h2>
+            <p>Nenhuma playlist atribuída</p>
+            <p>Configure uma playlist no painel administrativo</p>
+          </div>
+        </div>
+      ` : `
+        <video id="player" autoplay muted loop>
+          Seu navegador não suporta vídeo HTML5.
+        </video>
+      `}
       
       <script>
         const player = document.getElementById('player');
         const status = document.getElementById('status');
-        const playlist = ${JSON.stringify(device.assignedPlaylistId?.media || [])};
+        const playlist = ${JSON.stringify(playlist)};
         let currentIndex = 0;
         
         function playNext() {
@@ -392,23 +592,37 @@ app.get('/player/:deviceToken', async (req, res) => {
           }
           
           const media = playlist[currentIndex];
-          player.src = '${baseUrl}/stream/' + media.filename;
-          status.textContent = 'Reproduzindo: ' + media.name;
-          currentIndex = (currentIndex + 1) % playlist.length;
+          if (player) {
+            player.src = '${baseUrl}/stream/' + media.filename;
+            status.textContent = 'Reproduzindo: ' + media.name;
+            currentIndex = (currentIndex + 1) % playlist.length;
+          }
         }
         
-        player.addEventListener('ended', playNext);
-        player.addEventListener('canplay', () => status.textContent = 'Reproduzindo');
-        player.addEventListener('error', () => {
-          status.textContent = 'Erro ao carregar vídeo';
-          setTimeout(playNext, 3000);
-        });
+        if (player) {
+          player.addEventListener('ended', playNext);
+          player.addEventListener('canplay', () => status.textContent = 'Reproduzindo');
+          player.addEventListener('error', (e) => {
+            console.error('Erro no player:', e);
+            status.textContent = 'Erro ao carregar vídeo';
+            setTimeout(playNext, 3000);
+          });
+          
+          // Inicia reprodução
+          setTimeout(playNext, 2000);
+        } else {
+          status.textContent = 'Aguardando playlist';
+        }
         
-        setTimeout(playNext, 2000);
-        
+        // Heartbeat
         setInterval(() => {
-          fetch('${baseUrl}/api/devices/${device._id}/heartbeat', { method: 'POST' }).catch(console.error);
+          fetch('${baseUrl}/api/devices/${device._id}/heartbeat', { 
+            method: 'POST' 
+          }).catch(console.error);
         }, 30000);
+        
+        // Recarrega a página a cada 5 minutos para pegar atualizações
+        setTimeout(() => location.reload(), 5 * 60 * 1000);
       </script>
     </body>
     </html>`;
@@ -416,7 +630,23 @@ app.get('/player/:deviceToken', async (req, res) => {
     res.send(html);
   } catch (error) {
     console.error('Erro no player:', error);
-    res.status(500).send('Erro interno do servidor');
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Erro no Player</title>
+        <style>
+          body { margin: 0; padding: 50px; background: #000; color: #fff; text-align: center; font-family: Arial; }
+          h1 { color: #ff6b6b; }
+        </style>
+      </head>
+      <body>
+        <h1>❌ Erro interno do servidor</h1>
+        <p>Tente novamente em alguns minutos.</p>
+      </body>
+      </html>
+    `);
   }
 });
 
@@ -425,6 +655,7 @@ console.log('✅ Rota PLAYER configurada');
 // WebSocket
 io.on('connection', (socket) => {
   console.log('🟢 Cliente conectado:', socket.id);
+  
   socket.on('disconnect', () => {
     console.log('🔴 Cliente desconectado:', socket.id);
   });
@@ -435,4 +666,5 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor completo rodando na porta ${PORT}`);
   console.log('✅ Todas as rotas configuradas!');
+  console.log('🌐 CORS configurado para Vercel');
 });
