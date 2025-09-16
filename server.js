@@ -11,7 +11,7 @@ console.log('🚀 Iniciando servidor Tritotem...');
 
 const app = express();
 
-const cors = require('cors');
+
 
 const allowedOrigins = [
   'https://tritotemfrontend.vercel.app',
