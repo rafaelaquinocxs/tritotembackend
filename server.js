@@ -15,7 +15,10 @@ const app = express();
 
 const allowedOrigins = [
   'https://tritotemfrontend-5e9ac3c82-tritotems-projects.vercel.app',
-  'http://localhost:3000'
+  'https://tritotem-cc0a461d6f3e.herokuapp.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174'
 ];
 
 app.use(cors({
