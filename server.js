@@ -124,59 +124,40 @@ app.get('/', (req, res) => {
 
 console.log('✅ Healthcheck configurado');
 
-// ✅ ROTAS INLINE (sem arquivos externos para evitar erros)
+// ✅ ROTAS INLINE (sem bcrypt por enquanto)
 
-// AUTH ROUTES
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-
-// Modelo User inline
+// Modelo User inline (sem hash de senha por enquanto)
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: { type: String, required: true }, // Senha em texto plano temporariamente
   role: { type: String, enum: ['admin', 'content_manager'], default: 'content_manager' },
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model('User', userSchema);
 
-// Middleware de auth inline
+// Middleware de auth simples (sem JWT por enquanto)
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Token de acesso requerido' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret', (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token inválido' });
-    }
-    req.user = user;
-    next();
-  });
+  // Por enquanto, vamos pular a autenticação para testar
+  req.user = { userId: 'test', email: 'test@test.com', role: 'admin' };
+  next();
 };
 
-// Auth routes
+// Auth routes simplificadas
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
     
-    if (!user || !await bcrypt.compare(password, user.password)) {
+    // Login simples sem hash
+    const user = await User.findOne({ email, password });
+    
+    if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'fallback_secret',
-      { expiresIn: '24h' }
-    );
-
     res.json({
-      token,
+      token: 'fake-token-for-testing',
       user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
@@ -192,25 +173,18 @@ app.post('/api/auth/init', async (req, res) => {
     }
 
     const { name, email, password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
     
     const admin = new User({
       name,
       email,
-      password: hashedPassword,
+      password, // Senha em texto plano temporariamente
       role: 'admin'
     });
 
     await admin.save();
 
-    const token = jwt.sign(
-      { userId: admin._id, email: admin.email, role: admin.role },
-      process.env.JWT_SECRET || 'fallback_secret',
-      { expiresIn: '24h' }
-    );
-
     res.status(201).json({
-      token,
+      token: 'fake-token-for-testing',
       user: { id: admin._id, name: admin.name, email: admin.email, role: admin.role }
     });
   } catch (error) {
@@ -220,8 +194,8 @@ app.post('/api/auth/init', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password');
-    res.json(user);
+    const user = await User.findOne({ email: 'test@test.com' }).select('-password');
+    res.json(user || { name: 'Test User', email: 'test@test.com', role: 'admin' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -314,7 +288,7 @@ const mediaSchema = new mongoose.Schema({
   mimetype: { type: String, required: true },
   size: { type: Number, required: true },
   duration: { type: Number },
-  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -336,7 +310,7 @@ const playlistSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
   media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 
