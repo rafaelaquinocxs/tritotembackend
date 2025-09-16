@@ -10,10 +10,24 @@ const { Server } = require('socket.io');
 
 const app = express();
 
-// ✅ CORS para produção e dev
+// ✅ CORS mais permissivo para produção
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+// ✅ CORS adicional
 const allowedOrigins = [
   'https://tritotemfrontend-liart.vercel.app',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:5173'
 ];
 
 app.use(cors({
@@ -21,11 +35,14 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true); // Permitir todas as origens em produção
     }
   },
   credentials: true,
 }));
+
+// ✅ Responder OPTIONS para preflight
+app.options('*', cors());
 
 // Middleware
 app.use(express.json());
@@ -44,7 +61,7 @@ app.use('/uploads', express.static(uploadsDir));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: "*",
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   },
 });

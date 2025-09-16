@@ -1,80 +1,313 @@
-// backend/routes/player.js
 const express = require('express');
-const Device = require('../models/Device');
-const Playlist = require('../models/Playlist');
-const Media = require('../models/Media');
-
 const router = express.Router();
+const Device = require('../models/Device');
 
-// GET /player/:deviceToken → HTML dinâmico com playlist do totem
+// ✅ Rota do player para o totem
 router.get('/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
-    let urls = [];
-
-    // Tenta achar o dispositivo e a playlist atribuída
-    const device = await Device.findOne({ deviceToken })
-      .populate({
-        path: 'assignedPlaylistId',
-        populate: { path: 'items.mediaId' }
-      });
-
-    if (device?.assignedPlaylistId?.items?.length) {
-      urls = device.assignedPlaylistId.items
-        .sort((a, b) => a.order - b.order)
-        .map(it => it.mediaId && it.mediaId.url)
-        .filter(Boolean);
+    
+    const device = await Device.findOne({ deviceToken }).populate('assignedPlaylistId');
+    
+    if (!device) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Tritotem Player - Dispositivo não encontrado</title>
+          <style>
+            body { 
+              margin: 0; 
+              padding: 50px; 
+              background: #000; 
+              color: #fff; 
+              text-align: center; 
+              font-family: Arial, sans-serif;
+            }
+            h1 { color: #ff6b6b; }
+            .token { 
+              background: #333; 
+              padding: 10px; 
+              border-radius: 5px; 
+              font-family: monospace; 
+              margin: 20px 0;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>❌ Dispositivo não encontrado</h1>
+          <p>O token fornecido não corresponde a nenhum dispositivo cadastrado.</p>
+          <div class="token">Token: ${deviceToken}</div>
+          <p>Verifique se o dispositivo foi cadastrado no sistema.</p>
+        </body>
+        </html>
+      `);
     }
 
-    // Fallback: se não houver playlist atribuída, toca TODAS as mídias em ordem de upload
-    if (!urls.length) {
-      const all = await Media.find().sort({ createdAt: 1 });
-      urls = all.map(m => m.url);
-    }
+    // Atualizar último acesso
+    await Device.findByIdAndUpdate(device._id, { 
+      lastSeenAt: new Date(),
+      status: 'online'
+    });
 
-    const html = `<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <title>Tritotem Player</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    html,body{margin:0;height:100%;background:#000}
-    .wrap{display:flex;align-items:center;justify-content:center;height:100%}
-    video{width:100%;height:100%;object-fit:contain;background:#000}
-    .msg{color:#fff;font:16px/1.4 system-ui,sans-serif;text-align:center;padding:24px}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    ${urls.length ? `<video id="v" autoplay controls playsinline></video>` :
-      `<div class="msg">Nenhuma mídia encontrada para este totem.</div>`}
-  </div>
-  <script>
-    const playlist = ${JSON.stringify(urls)};
-    if (playlist.length) {
-      const v = document.getElementById('v');
-      let i = 0;
+    // ✅ HTML do player
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://tritotem-cc0a461d6f3e.herokuapp.com' 
+      : 'http://localhost:3001';
 
-      function play(idx){
-        i = (idx + playlist.length) % playlist.length;
-        v.src = playlist[i];
-        v.load();
-        v.play().catch(()=>{/* autoplay blockado */});
-      }
-      v.addEventListener('ended', ()=> play(i+1));
-      v.addEventListener('error', ()=> play(i+1)); // se der erro, pula pro próximo
-      play(0);
-
-      // Opcional: atualizar a playlist a cada 60s sem recarregar a página
-      // fetch(window.location.href + '?json=1') → você pode criar um endpoint JSON depois
-    }
-  </script>
-</body>
-</html>`;
-    res.set('Content-Type', 'text/html; charset=utf-8').send(html);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Tritotem Player - ${device.name}</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          background: #000; 
+          overflow: hidden; 
+          font-family: Arial, sans-serif;
+        }
+        video { 
+          width: 100vw; 
+          height: 100vh; 
+          object-fit: cover; 
+          display: block;
+        }
+        .info { 
+          position: fixed; 
+          top: 10px; 
+          left: 10px; 
+          color: white; 
+          background: rgba(0,0,0,0.7);
+          padding: 10px;
+          border-radius: 5px;
+          font-size: 14px;
+          z-index: 1000;
+        }
+        .loading {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          text-align: center;
+          z-index: 1000;
+        }
+        .spinner {
+          border: 4px solid #333;
+          border-top: 4px solid #fff;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 20px;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .error {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: #ff6b6b;
+          text-align: center;
+          z-index: 1000;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="info">
+        <div><strong>Dispositivo:</strong> ${device.name}</div>
+        <div><strong>Status:</strong> <span id="status">Carregando...</span></div>
+        <div><strong>Mídia:</strong> <span id="currentMedia">-</span></div>
+      </div>
+      
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>Carregando playlist...</div>
+      </div>
+      
+      <div id="error" class="error" style="display: none;">
+        <h2>❌ Erro</h2>
+        <p id="errorMessage">Erro desconhecido</p>
+        <p><small>Tentando novamente em <span id="countdown">10</span> segundos...</small></p>
+      </div>
+      
+      <video id="player" autoplay muted loop style="display: none;">
+        Seu navegador não suporta vídeo HTML5.
+      </video>
+      
+      <script>
+        const player = document.getElementById('player');
+        const status = document.getElementById('status');
+        const currentMedia = document.getElementById('currentMedia');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const countdown = document.getElementById('countdown');
+        
+        // ✅ Lista de vídeos da playlist
+        const playlist = ${JSON.stringify(device.assignedPlaylistId?.media || [])};
+        let currentIndex = 0;
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        function hideLoading() {
+          loading.style.display = 'none';
+          player.style.display = 'block';
+        }
+        
+        function showError(message) {
+          error.style.display = 'block';
+          errorMessage.textContent = message;
+          player.style.display = 'none';
+          loading.style.display = 'none';
+          
+          let count = 10;
+          countdown.textContent = count;
+          
+          const timer = setInterval(() => {
+            count--;
+            countdown.textContent = count;
+            if (count <= 0) {
+              clearInterval(timer);
+              error.style.display = 'none';
+              playNext();
+            }
+          }, 1000);
+        }
+        
+        function playNext() {
+          if (playlist.length === 0) {
+            status.textContent = 'Offline';
+            currentMedia.textContent = 'Nenhuma mídia na playlist';
+            showError('Nenhuma mídia encontrada na playlist');
+            return;
+          }
+          
+          const media = playlist[currentIndex];
+          const videoUrl = '${baseUrl}/stream/' + media.filename;
+          
+          status.textContent = 'Carregando...';
+          currentMedia.textContent = media.name;
+          
+          player.src = videoUrl;
+          player.load();
+          
+          currentIndex = (currentIndex + 1) % playlist.length;
+        }
+        
+        player.addEventListener('loadstart', () => {
+          status.textContent = 'Carregando vídeo...';
+        });
+        
+        player.addEventListener('canplay', () => {
+          hideLoading();
+          status.textContent = 'Reproduzindo';
+          retryCount = 0;
+        });
+        
+        player.addEventListener('ended', () => {
+          status.textContent = 'Próximo vídeo...';
+          setTimeout(playNext, 1000);
+        });
+        
+        player.addEventListener('error', (e) => {
+          console.error('Erro no player:', e);
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            status.textContent = \`Erro - Tentativa \${retryCount}/\${maxRetries}\`;
+            showError(\`Erro ao carregar vídeo. Tentativa \${retryCount} de \${maxRetries}\`);
+          } else {
+            status.textContent = 'Erro crítico';
+            showError('Falha crítica no carregamento. Verifique a conexão.');
+            retryCount = 0;
+          }
+        });
+        
+        // ✅ Heartbeat para marcar como online
+        function sendHeartbeat() {
+          fetch('${baseUrl}/api/devices/${device._id}/heartbeat', { 
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }).catch(err => {
+            console.error('Erro no heartbeat:', err);
+          });
+        }
+        
+        // ✅ Iniciar reprodução
+        setTimeout(() => {
+          playNext();
+        }, 2000);
+        
+        // ✅ Heartbeat a cada 30 segundos
+        setInterval(sendHeartbeat, 30000);
+        
+        // ✅ Heartbeat inicial
+        sendHeartbeat();
+        
+        // ✅ Recarregar página a cada 6 horas para evitar memory leaks
+        setTimeout(() => {
+          window.location.reload();
+        }, 6 * 60 * 60 * 1000);
+        
+        // ✅ Detectar se saiu de foco e voltar ao foco
+        window.addEventListener('blur', () => {
+          setTimeout(() => window.focus(), 1000);
+        });
+        
+        // ✅ Prevenir context menu
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        
+        // ✅ Prevenir teclas de desenvolvedor
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'F12' || 
+              (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+              (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+              (e.ctrlKey && e.key === 'u')) {
+            e.preventDefault();
+          }
+        });
+      </script>
+    </body>
+    </html>`;
+    
+    res.send(html);
+  } catch (error) {
+    console.error('Erro no player:', error);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Erro - Tritotem Player</title>
+        <style>
+          body { 
+            margin: 0; 
+            padding: 50px; 
+            background: #000; 
+            color: #fff; 
+            text-align: center; 
+            font-family: Arial, sans-serif;
+          }
+          h1 { color: #ff6b6b; }
+        </style>
+      </head>
+      <body>
+        <h1>❌ Erro interno do servidor</h1>
+        <p>Ocorreu um erro ao carregar o player.</p>
+        <p><small>Erro: ${error.message}</small></p>
+      </body>
+      </html>
+    `);
   }
 });
 
