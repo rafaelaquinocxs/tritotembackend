@@ -136,16 +136,51 @@ app.get('/stream/:filename', (req, res) => {
   }
 });
 
-// Rotas
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/media', require('./routes/media'));
-app.use('/api/playlists', require('./routes/playlists'));
-app.use('/api/devices', require('./routes/devices'));
-app.use('/player', require('./routes/player'));
-
 // Healthcheck
 app.get('/', (_req, res) => res.json({ message: 'API Tritotem funcionando!' }));
+
+// ✅ Rotas com tratamento de erro
+try {
+  app.use('/api/auth', require('./routes/auth'));
+  console.log('✅ Rota auth carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota auth:', error.message);
+}
+
+try {
+  app.use('/api/users', require('./routes/users'));
+  console.log('✅ Rota users carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota users:', error.message);
+}
+
+try {
+  app.use('/api/media', require('./routes/media'));
+  console.log('✅ Rota media carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota media:', error.message);
+}
+
+try {
+  app.use('/api/playlists', require('./routes/playlists'));
+  console.log('✅ Rota playlists carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota playlists:', error.message);
+}
+
+try {
+  app.use('/api/devices', require('./routes/devices'));
+  console.log('✅ Rota devices carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota devices:', error.message);
+}
+
+try {
+  app.use('/player', require('./routes/player'));
+  console.log('✅ Rota player carregada');
+} catch (error) {
+  console.error('❌ Erro ao carregar rota player:', error.message);
+}
 
 // WebSocket
 io.on('connection', (socket) => {

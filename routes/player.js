@@ -2,10 +2,37 @@ const express = require('express');
 const router = express.Router();
 const Device = require('../models/Device');
 
-// ✅ Rota do player para o totem
+// ✅ Rota do player para o totem - SINTAXE CORRIGIDA
 router.get('/:deviceToken', async (req, res) => {
   try {
-    const { deviceToken } = req.params;
+    const deviceToken = req.params.deviceToken;
+    
+    if (!deviceToken) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Tritotem Player - Token inválido</title>
+          <style>
+            body { 
+              margin: 0; 
+              padding: 50px; 
+              background: #000; 
+              color: #fff; 
+              text-align: center; 
+              font-family: Arial, sans-serif;
+            }
+            h1 { color: #ff6b6b; }
+          </style>
+        </head>
+        <body>
+          <h1>❌ Token inválido</h1>
+          <p>Token do dispositivo não fornecido.</p>
+        </body>
+        </html>
+      `);
+    }
     
     const device = await Device.findOne({ deviceToken }).populate('assignedPlaylistId');
     
