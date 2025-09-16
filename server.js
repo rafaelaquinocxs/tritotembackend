@@ -107,6 +107,8 @@ app.get('/stream/:filename', (req, res) => {
 });
 
 // Rotas de API
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/playlists', require('./routes/playlists'));
 app.use('/api/devices', require('./routes/devices'));

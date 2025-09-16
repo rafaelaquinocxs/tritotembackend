@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const Media = require('../models/Media');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -31,7 +32,7 @@ const upload = multer({
 });
 
 // GET /api/media - lista
-router.get('/', async (_req, res) => {
+router.get('/', authenticate, async (_req, res) => {
   try {
     const medias = await Media.find().sort({ createdAt: -1 });
     res.json(medias);
@@ -43,6 +44,7 @@ router.get('/', async (_req, res) => {
 // POST /api/media - upload (aceita 'media' ou 'video')
 router.post(
   '/',
+  authenticate,
   upload.fields([{ name: 'media', maxCount: 1 }, { name: 'video', maxCount: 1 }]),
   async (req, res) => {
     try {
@@ -74,7 +76,7 @@ router.post(
 );
 
 // GET /api/media/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
     if (!media) return res.status(404).json({ error: 'Mídia não encontrada' });
@@ -85,7 +87,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // DELETE /api/media/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
     if (!media) return res.status(404).json({ error: 'Mídia não encontrada' });

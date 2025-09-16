@@ -2,11 +2,12 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const Device = require('../models/Device');
 const Playlist = require('../models/Playlist');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/devices - Listar todos os dispositivos
-router.get('/', async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const devices = await Device.find()
       .populate('assignedPlaylistId')
@@ -29,7 +30,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/devices - Criar novo dispositivo
-router.post('/', async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
     const { name } = req.body;
     
@@ -52,7 +53,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/devices/:id - Obter dispositivo específico
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const device = await Device.findById(req.params.id)
       .populate('assignedPlaylistId');
@@ -68,7 +69,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/devices/:id - Atualizar dispositivo
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const { name, assignedPlaylistId } = req.body;
 
@@ -94,7 +95,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/devices/:id - Excluir dispositivo
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const device = await Device.findByIdAndDelete(req.params.id);
     
@@ -109,7 +110,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/devices/broadcast-assign - Atribuir playlist a todos os dispositivos
-router.post('/broadcast-assign', async (req, res) => {
+router.post('/broadcast-assign', authenticate, async (req, res) => {
   try {
     const { playlistId } = req.body;
     

@@ -1,8 +1,12 @@
 const express = require('express');
 const Playlist = require('../models/Playlist');
 const Media = require('../models/Media');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Aplicar autenticação para todas as rotas
+router.use(authenticate);
 
 // GET /api/playlists - Listar todas as playlists
 router.get('/', async (req, res) => {
