@@ -5,44 +5,33 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const http = require('http');
-const { Server } = require('socket.io');
 const multer = require('multer');
 
-console.log('🚀 Iniciando servidor completo...');
+console.log('🚀 Iniciando servidor Tritotem...');
 
 const app = express();
 
-// ✅ CORS CORRIGIDO - Permite requisições da Vercel
+// CORS
 app.use(cors({
-  origin: ['https://tritotemfrontend-liart.vercel.app', '*'],
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
-// Middleware para OPTIONS preflight
-app.options('*', cors());
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-console.log('✅ Middlewares configurados');
-
-// Pasta uploads
+// Uploads
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 app.use('/uploads', express.static(uploadsDir));
 
-console.log('✅ Pasta uploads configurada');
-
-// Configuração do multer para upload
+// Multer
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
@@ -51,7 +40,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+  limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|mp4|webm|ogg|avi|mov/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -64,37 +53,69 @@ const upload = multer({
   }
 });
 
-// WebSocket
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  },
-});
-
-app.use((req, _res, next) => {
-  req.io = io;
-  next();
-});
-
-console.log('✅ WebSocket configurado');
-
 // MongoDB
 (async () => {
   try {
     if (process.env.MONGODB_URI) {
       await mongoose.connect(process.env.MONGODB_URI);
-      console.log('✅ Conectado ao MongoDB');
+      console.log('✅ MongoDB conectado');
     } else {
       console.log('⚠️ MONGODB_URI não configurado');
     }
   } catch (err) {
-    console.error('❌ Erro ao conectar ao MongoDB:', err);
+    console.error('❌ Erro MongoDB:', err);
   }
 })();
 
-// Stream de vídeo
+// Modelos
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['admin', 'content_manager'], default: 'content_manager' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const mediaSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  filename: { type: String, required: true },
+  originalName: { type: String, required: true },
+  mimetype: { type: String, required: true },
+  size: { type: Number, required: true },
+  duration: { type: Number },
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const playlistSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  description: { type: String },
+  media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const deviceSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  deviceToken: { type: String, required: true, unique: true },
+  assignedPlaylistId: { type: mongoose.Schema.Types.ObjectId, ref: 'Playlist' },
+  status: { type: String, enum: ['online', 'offline'], default: 'offline' },
+  lastSeenAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model('User', userSchema);
+const Media = mongoose.model('Media', mediaSchema);
+const Playlist = mongoose.model('Playlist', playlistSchema);
+const Device = mongoose.model('Device', deviceSchema);
+
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+  req.user = { userId: 'test', email: 'test@test.com', role: 'admin' };
+  next();
+};
+
+// Stream
 app.get('/stream/:filename', (req, res) => {
   try {
     const filePath = path.join(uploadsDir, req.params.filename);
@@ -145,78 +166,15 @@ app.get('/stream/:filename', (req, res) => {
   }
 });
 
-console.log('✅ Rota de stream configurada');
-
 // Healthcheck
 app.get('/', (req, res) => {
   res.json({ message: 'API Tritotem funcionando!', timestamp: new Date().toISOString() });
 });
 
-console.log('✅ Healthcheck configurado');
-
-// ✅ MODELOS MONGOOSE
-
-// Modelo User
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'content_manager'], default: 'content_manager' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
-
-// Modelo Media
-const mediaSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  filename: { type: String, required: true },
-  originalName: { type: String, required: true },
-  mimetype: { type: String, required: true },
-  size: { type: Number, required: true },
-  duration: { type: Number },
-  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Media = mongoose.model('Media', mediaSchema);
-
-// Modelo Playlist
-const playlistSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  description: { type: String },
-  media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Playlist = mongoose.model('Playlist', playlistSchema);
-
-// Modelo Device
-const deviceSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  deviceToken: { type: String, required: true, unique: true },
-  assignedPlaylistId: { type: mongoose.Schema.Types.ObjectId, ref: 'Playlist' },
-  status: { type: String, enum: ['online', 'offline'], default: 'offline' },
-  lastSeenAt: { type: Date, default: Date.now },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const Device = mongoose.model('Device', deviceSchema);
-
-// Middleware de auth simples
-const authenticateToken = (req, res, next) => {
-  // Por enquanto, vamos pular a autenticação para testar
-  req.user = { userId: 'test', email: 'test@test.com', role: 'admin' };
-  next();
-};
-
-// ✅ ROTAS DE AUTENTICAÇÃO
-
+// AUTH ROUTES
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
     const user = await User.findOne({ email, password });
     
     if (!user) {
@@ -268,10 +226,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
-console.log('✅ Rotas AUTH configuradas');
-
-// ✅ ROTAS DE DISPOSITIVOS
-
+// DEVICE ROUTES
 app.get('/api/devices', authenticateToken, async (req, res) => {
   try {
     const devices = await Device.find().populate('assignedPlaylistId');
@@ -358,10 +313,7 @@ app.post('/api/devices/broadcast-assign', authenticateToken, async (req, res) =>
   }
 });
 
-console.log('✅ Rotas DEVICES configuradas');
-
-// ✅ ROTAS DE MÍDIA
-
+// MEDIA ROUTES
 app.get('/api/media', authenticateToken, async (req, res) => {
   try {
     const media = await Media.find().populate('uploadedBy', 'name email');
@@ -408,7 +360,6 @@ app.delete('/api/media/:id', authenticateToken, async (req, res) => {
     const media = await Media.findById(req.params.id);
     if (!media) return res.status(404).json({ error: 'Mídia não encontrada' });
 
-    // Remove arquivo físico
     const filePath = path.join(uploadsDir, media.filename);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -421,10 +372,7 @@ app.delete('/api/media/:id', authenticateToken, async (req, res) => {
   }
 });
 
-console.log('✅ Rotas MEDIA configuradas');
-
-// ✅ ROTAS DE PLAYLISTS
-
+// PLAYLIST ROUTES
 app.get('/api/playlists', authenticateToken, async (req, res) => {
   try {
     const playlists = await Playlist.find().populate('media').populate('createdBy', 'name email');
@@ -490,10 +438,7 @@ app.delete('/api/playlists/:id', authenticateToken, async (req, res) => {
   }
 });
 
-console.log('✅ Rotas PLAYLISTS configuradas');
-
-// ✅ ROTA DO PLAYER
-
+// PLAYER ROUTE
 app.get('/player/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
@@ -517,13 +462,11 @@ app.get('/player/:deviceToken', async (req, res) => {
         <body>
           <h1>❌ Dispositivo não encontrado</h1>
           <p>Token: ${deviceToken}</p>
-          <p>Verifique se o dispositivo foi cadastrado corretamente.</p>
         </body>
         </html>
       `);
     }
 
-    // Atualiza status do dispositivo
     await Device.findByIdAndUpdate(device._id, { 
       lastSeenAt: new Date(), 
       status: 'online' 
@@ -570,7 +513,6 @@ app.get('/player/:deviceToken', async (req, res) => {
             <h1>📺 Tritotem Player</h1>
             <h2>${device.name}</h2>
             <p>Nenhuma playlist atribuída</p>
-            <p>Configure uma playlist no painel administrativo</p>
           </div>
         </div>
       ` : `
@@ -608,20 +550,17 @@ app.get('/player/:deviceToken', async (req, res) => {
             setTimeout(playNext, 3000);
           });
           
-          // Inicia reprodução
           setTimeout(playNext, 2000);
         } else {
           status.textContent = 'Aguardando playlist';
         }
         
-        // Heartbeat
         setInterval(() => {
           fetch('${baseUrl}/api/devices/${device._id}/heartbeat', { 
             method: 'POST' 
           }).catch(console.error);
         }, 30000);
         
-        // Recarrega a página a cada 5 minutos para pegar atualizações
         setTimeout(() => location.reload(), 5 * 60 * 1000);
       </script>
     </body>
@@ -630,41 +569,13 @@ app.get('/player/:deviceToken', async (req, res) => {
     res.send(html);
   } catch (error) {
     console.error('Erro no player:', error);
-    res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Erro no Player</title>
-        <style>
-          body { margin: 0; padding: 50px; background: #000; color: #fff; text-align: center; font-family: Arial; }
-          h1 { color: #ff6b6b; }
-        </style>
-      </head>
-      <body>
-        <h1>❌ Erro interno do servidor</h1>
-        <p>Tente novamente em alguns minutos.</p>
-      </body>
-      </html>
-    `);
+    res.status(500).send('Erro interno do servidor');
   }
 });
 
-console.log('✅ Rota PLAYER configurada');
-
-// WebSocket
-io.on('connection', (socket) => {
-  console.log('🟢 Cliente conectado:', socket.id);
-  
-  socket.on('disconnect', () => {
-    console.log('🔴 Cliente desconectado:', socket.id);
-  });
-});
-
-// Iniciar servidor
+// Start server
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor completo rodando na porta ${PORT}`);
-  console.log('✅ Todas as rotas configuradas!');
-  console.log('🌐 CORS configurado para Vercel');
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log('✅ Sistema Tritotem pronto!');
 });
