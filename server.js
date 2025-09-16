@@ -10,6 +10,8 @@ const { Server } = require('socket.io');
 
 const app = express();
 
+console.log('🚀 Iniciando servidor...');
+
 // ✅ CORS mais permissivo para produção
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -32,11 +34,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Permitir todas as origens em produção
-    }
+    callback(null, true); // Permitir todas as origens
   },
   credentials: true,
 }));
@@ -48,6 +46,8 @@ app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+console.log('✅ Middlewares configurados');
+
 // 🛠 Cria a pasta uploads se não existir
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -56,6 +56,8 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Servir arquivos estáticos
 app.use('/uploads', express.static(uploadsDir));
+
+console.log('✅ Pasta uploads configurada');
 
 // HTTP + WebSocket
 const server = http.createServer(app);
@@ -71,6 +73,8 @@ app.use((req, _res, next) => {
   req.io = io;
   next();
 });
+
+console.log('✅ WebSocket configurado');
 
 // 🔗 Conexão MongoDB
 (async () => {
@@ -136,51 +140,83 @@ app.get('/stream/:filename', (req, res) => {
   }
 });
 
+console.log('✅ Rota de stream configurada');
+
 // Healthcheck
 app.get('/', (_req, res) => res.json({ message: 'API Tritotem funcionando!' }));
 
-// ✅ Rotas com tratamento de erro
+console.log('✅ Healthcheck configurado');
+
+// ✅ Carregamento individual das rotas com debug
+console.log('🔍 Carregando rotas...');
+
+// 1. AUTH
 try {
-  app.use('/api/auth', require('./routes/auth'));
-  console.log('✅ Rota auth carregada');
+  console.log('🔍 Tentando carregar rota AUTH...');
+  const authRoute = require('./routes/auth');
+  app.use('/api/auth', authRoute);
+  console.log('✅ Rota AUTH carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota auth:', error.message);
+  console.error('❌ ERRO na rota AUTH:', error.message);
+  console.error('Stack:', error.stack);
 }
 
+// 2. USERS
 try {
-  app.use('/api/users', require('./routes/users'));
-  console.log('✅ Rota users carregada');
+  console.log('🔍 Tentando carregar rota USERS...');
+  const usersRoute = require('./routes/users');
+  app.use('/api/users', usersRoute);
+  console.log('✅ Rota USERS carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota users:', error.message);
+  console.error('❌ ERRO na rota USERS:', error.message);
+  console.error('Stack:', error.stack);
 }
 
+// 3. MEDIA
 try {
-  app.use('/api/media', require('./routes/media'));
-  console.log('✅ Rota media carregada');
+  console.log('🔍 Tentando carregar rota MEDIA...');
+  const mediaRoute = require('./routes/media');
+  app.use('/api/media', mediaRoute);
+  console.log('✅ Rota MEDIA carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota media:', error.message);
+  console.error('❌ ERRO na rota MEDIA:', error.message);
+  console.error('Stack:', error.stack);
 }
 
+// 4. PLAYLISTS
 try {
-  app.use('/api/playlists', require('./routes/playlists'));
-  console.log('✅ Rota playlists carregada');
+  console.log('🔍 Tentando carregar rota PLAYLISTS...');
+  const playlistsRoute = require('./routes/playlists');
+  app.use('/api/playlists', playlistsRoute);
+  console.log('✅ Rota PLAYLISTS carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota playlists:', error.message);
+  console.error('❌ ERRO na rota PLAYLISTS:', error.message);
+  console.error('Stack:', error.stack);
 }
 
+// 5. DEVICES
 try {
-  app.use('/api/devices', require('./routes/devices'));
-  console.log('✅ Rota devices carregada');
+  console.log('🔍 Tentando carregar rota DEVICES...');
+  const devicesRoute = require('./routes/devices');
+  app.use('/api/devices', devicesRoute);
+  console.log('✅ Rota DEVICES carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota devices:', error.message);
+  console.error('❌ ERRO na rota DEVICES:', error.message);
+  console.error('Stack:', error.stack);
 }
 
+// 6. PLAYER
 try {
-  app.use('/player', require('./routes/player'));
-  console.log('✅ Rota player carregada');
+  console.log('🔍 Tentando carregar rota PLAYER...');
+  const playerRoute = require('./routes/player');
+  app.use('/player', playerRoute);
+  console.log('✅ Rota PLAYER carregada com sucesso');
 } catch (error) {
-  console.error('❌ Erro ao carregar rota player:', error.message);
+  console.error('❌ ERRO na rota PLAYER:', error.message);
+  console.error('Stack:', error.stack);
 }
+
+console.log('✅ Todas as rotas processadas');
 
 // WebSocket
 io.on('connection', (socket) => {
@@ -195,4 +231,5 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log('✅ Servidor iniciado com sucesso!');
 });
