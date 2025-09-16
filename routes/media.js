@@ -8,11 +8,13 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Pasta de uploads (../../uploads a partir de routes/)
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+// ✅ Pasta de uploads compatível com Heroku e local
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
-// Multer
+// 🎥 Configuração do Multer para salvar vídeos
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
@@ -31,7 +33,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 } // 500MB
 });
 
-// GET /api/media - lista
+// 📦 GET /api/media - lista de mídias
 router.get('/', authenticate, async (_req, res) => {
   try {
     const medias = await Media.find().sort({ createdAt: -1 });
@@ -41,7 +43,7 @@ router.get('/', authenticate, async (_req, res) => {
   }
 });
 
-// POST /api/media - upload (aceita 'media' ou 'video')
+// ⬆️ POST /api/media - upload de vídeo
 router.post(
   '/',
   authenticate,
@@ -75,7 +77,7 @@ router.post(
   }
 );
 
-// GET /api/media/:id
+// 🔍 GET /api/media/:id - detalhe
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
@@ -86,7 +88,7 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// DELETE /api/media/:id
+// ❌ DELETE /api/media/:id
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
@@ -102,7 +104,7 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Tratador de erros do Multer
+// ⚠️ Tratador de erros do Multer
 router.use((err, _req, res, next) => {
   if (err && (err.name === 'MulterError' || /Apenas arquivos de vídeo/.test(err.message))) {
     return res.status(400).json({ error: err.message });
