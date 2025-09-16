@@ -11,11 +11,11 @@ console.log('🚀 Iniciando servidor Tritotem...');
 
 const app = express();
 
-// CORS corrigido
+const cors = require('cors');
+
 const allowedOrigins = [
   'https://tritotemfrontend.vercel.app',
-  'https://tritotemfrontend-liart.vercel.app',
-  'https://tritotemfrontend-sa9c3c02-tritotems-projects.vercel.app',
+  'https://tritotemfrontend-5e9ac3c82-tritotems-projects.vercel.app',
 ];
 
 app.use(cors({
@@ -26,9 +26,9 @@ app.use(cors({
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  methods: 'GET,POST,PUT,DELETE,OPTIONS',
+  allowedHeaders: 'Content-Type,Authorization',
+  credentials: true,
 }));
 
 app.use(express.json());
