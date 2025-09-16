@@ -9,8 +9,25 @@ const { Server } = require('socket.io');
 
 const app = express();
 
+// ✅ Configuração de CORS com origem liberada para Vercel e localhost
+const allowedOrigins = [
+  'https://tritotemfrontend-liart.vercel.app',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Permite requisições sem origin (ex: Postman) ou da lista segura
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
 // Middleware básico
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -27,7 +44,7 @@ app.use('/uploads', express.static(uploadsDir));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   },
 });
