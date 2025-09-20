@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tritotem TV Demo - Sistema de Mídia Digital</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 1200px;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header {
+            margin-bottom: 3rem;
+        }
+        
+        .logo {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        .title {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .subtitle {
+            font-size: 1.5rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+        
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .device-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .device-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .device-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .device-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .device-location {
+            font-size: 1rem;
+            opacity: 0.8;
+            margin-bottom: 1rem;
+        }
+        
+        .device-status {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .status-online {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            color: #22c55e;
+        }
+        
+        .status-offline {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #ef4444;
+        }
+        
+        .player-button {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .player-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .info-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 2rem;
+        }
+        
+        .info-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .info-text {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .feature {
+            text-align: left;
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .feature-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .feature-text {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        
+        .footer {
+            margin-top: 3rem;
+            opacity: 0.7;
+        }
+        
+        @media (max-width: 768px) {
+            .title {
+                font-size: 2rem;
+            }
+            
+            .subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .devices-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">📺</div>
+            <h1 class="title">Tritotem TV Demo</h1>
+            <p class="subtitle">Sistema de Gestão de Mídia Digital para TVs Smart TCL Android</p>
+        </div>
+        
+        <div class="info-section">
+            <h2 class="info-title">🚀 Demonstração do Sistema</h2>
+            <p class="info-text">
+                Esta é uma demonstração do sistema Tritotem, projetado especificamente para gerenciar 
+                conteúdo digital em TVs smart TCL Android. Cada TV possui um endpoint único que 
+                permite reprodução automática de playlists personalizadas.
+            </p>
+            
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🎯</div>
+                    <div class="feature-title">Endpoint Único</div>
+                    <div class="feature-text">Cada TV tem sua URL exclusiva para acesso direto ao player</div>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">Reprodução Automática</div>
+                    <div class="feature-text">Conteúdo inicia automaticamente e roda em loop contínuo</div>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">📱</div>
+                    <div class="feature-title">Gerenciamento Remoto</div>
+                    <div class="feature-text">Controle total via interface web administrativa</div>
+                </div>
+                
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <div class="feature-title">Monitoramento</div>
+                    <div class="feature-text">Acompanhe status e atividade de cada dispositivo</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="devices-grid" id="devices-grid">
+            <!-- Dispositivos serão carregados via JavaScript -->
+        </div>
+        
+        <div class="info-section">
+            <h2 class="info-title">📋 Como Usar</h2>
+            <p class="info-text">
+                <strong>1.</strong> Clique em "Abrir Player" para acessar o player de qualquer TV<br>
+                <strong>2.</strong> O conteúdo será reproduzido automaticamente em tela cheia<br>
+                <strong>3.</strong> Use o painel administrativo para gerenciar playlists e dispositivos<br>
+                <strong>4.</strong> Monitore o status de todas as TVs em tempo real
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p>Tritotem v2.0 - Desenvolvido para TVs Smart TCL Android</p>
+            <p>Sistema de Circuito Digital Out-of-Home</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuração da API
+        const API_BASE = window.location.origin;
+        
+        // Carregar dispositivos
+        async function loadDevices() {
+            try {
+                const response = await fetch(`${API_BASE}/api/devices`);
+                const devices = await response.json();
+                
+                const grid = document.getElementById('devices-grid');
+                
+                if (devices.length === 0) {
+                    grid.innerHTML = `
+                        <div class="device-card">
+                            <div class="device-icon">📺</div>
+                            <div class="device-name">Nenhum Dispositivo</div>
+                            <div class="device-location">Configure dispositivos no painel administrativo</div>
+                            <div class="device-status status-offline">Sistema Vazio</div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                grid.innerHTML = devices.map(device => `
+                    <div class="device-card">
+                        <div class="device-icon">📺</div>
+                        <div class="device-name">${device.name}</div>
+                        <div class="device-location">${device.location || 'Local não definido'}</div>
+                        <div class="device-status ${device.status === 'online' ? 'status-online' : 'status-offline'}">
+                            ${device.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+                        </div>
+                        <div style="margin-top: 1rem;">
+                            <a href="${API_BASE}/player/${device.deviceToken}" 
+                               target="_blank" 
+                               class="player-button">
+                                ▶️ Abrir Player
+                            </a>
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">
+                            Playlist: ${device.assignedPlaylistId?.name || 'Nenhuma'}
+                        </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.6;">
+                            Resolução: ${device.resolution || '1920x1080'}
+                        </div>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Erro ao carregar dispositivos:', error);
+                
+                // Mostrar dispositivos de exemplo se a API falhar
+                const grid = document.getElementById('devices-grid');
+                grid.innerHTML = `
+                    <div class="device-card">
+                        <div class="device-icon">📺</div>
+                        <div class="device-name">TV Recepção Principal</div>
+                        <div class="device-location">Recepção - Térreo</div>
+                        <div class="device-status status-online">🟢 Online</div>
+                        <div style="margin-top: 1rem;">
+                            <a href="#" class="player-button" onclick="alert('Configure o sistema primeiro!')">
+                                ▶️ Abrir Player
+                            </a>
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">
+                            Playlist: Exemplo
+                        </div>
+                    </div>
+                    
+                    <div class="device-card">
+                        <div class="device-icon">📺</div>
+                        <div class="device-name">TV Sala de Espera</div>
+                        <div class="device-location">Sala de Espera - 1º Andar</div>
+                        <div class="device-status status-offline">🔴 Offline</div>
+                        <div style="margin-top: 1rem;">
+                            <a href="#" class="player-button" onclick="alert('Configure o sistema primeiro!')">
+                                ▶️ Abrir Player
+                            </a>
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">
+                            Playlist: Nenhuma
+                        </div>
+                    </div>
+                    
+                    <div class="device-card">
+                        <div class="device-icon">📺</div>
+                        <div class="device-name">TV Corredor Central</div>
+                        <div class="device-location">Corredor Principal - 2º Andar</div>
+                        <div class="device-status status-online">🟢 Online</div>
+                        <div style="margin-top: 1rem;">
+                            <a href="#" class="player-button" onclick="alert('Configure o sistema primeiro!')">
+                                ▶️ Abrir Player
+                            </a>
+                        </div>
+                        <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">
+                            Playlist: Exemplo
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Carregar dispositivos quando a página carregar
+        document.addEventListener('DOMContentLoaded', loadDevices);
+        
+        // Atualizar dispositivos a cada 30 segundos
+        setInterval(loadDevices, 30000);
+    </script>
+</body>
+</html>
