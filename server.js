@@ -499,262 +499,93 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     if (process.env.NODE_ENV !== 'production') {
       return res.json({ 
         id: 'dev-user',
-        name: 'Desenvolvedor', 
-        email: 'dev@tritotem.com', 
-        role: 'admin' 
+        name: 'Desenvolvedor',
+        email: 'dev@tritotem.com',
+        role: 'admin'
       });
     }
     
     const user = await User.findById(req.user.userId).select('-password');
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
-    
-    res.json({
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role
-    });
+    res.json(user);
   } catch (error) {
     console.error('Erro ao buscar usuário:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// ROTAS DE DISPOSITIVOS (TVs)
-app.get('/api/devices', authenticateToken, async (req, res) => {
+// ROTAS DE USUÁRIOS (CRUD)
+app.get('/api/users', authenticateToken, async (req, res) => {
   try {
-    const devices = await Device.find({ isActive: true })
-      .populate('assignedPlaylistId')
-      .sort({ createdAt: -1 });
-    res.json(devices);
+    const users = await User.find({ isActive: true }).select('-password');
+    res.json(users);
   } catch (error) {
-    console.error('Erro ao listar dispositivos:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/devices', authenticateToken, async (req, res) => {
+app.post('/api/users', authenticateToken, async (req, res) => {
   try {
-    const { name, location, resolution } = req.body;
+    const { name, email, password, role } = req.body;
     
-    if (!name) {
-      return res.status(400).json({ error: 'Nome do dispositivo é obrigatório' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
     
-    const device = new Device({
-      name: name.trim(),
-      location: location?.trim(),
-      resolution: resolution || '1920x1080',
-      deviceToken: uuidv4()
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const newUser = new User({ 
+      name, 
+      email, 
+      password: hashedPassword, 
+      role 
     });
     
-    await device.save();
-    await device.populate('assignedPlaylistId');
-    
-    console.log(`📱 Novo dispositivo criado: ${device.name} (${device.deviceToken})`);
-    res.status(201).json(device);
+    await newUser.save();
+    res.status(201).json(newUser);
   } catch (error) {
-    console.error('Erro ao criar dispositivo:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-app.get('/api/devices/:id', authenticateToken, async (req, res) => {
-  try {
-    const device = await Device.findOne({ 
-      _id: req.params.id, 
-      isActive: true 
-    }).populate('assignedPlaylistId');
-    
-    if (!device) {
-      return res.status(404).json({ error: 'Dispositivo não encontrado' });
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Email já está em uso' });
     }
-    
-    res.json(device);
-  } catch (error) {
-    console.error('Erro ao buscar dispositivo:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.put('/api/devices/:id', authenticateToken, async (req, res) => {
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
   try {
-    const { name, location, resolution, assignedPlaylistId } = req.body;
-    
-    const updateData = {};
-    if (name) updateData.name = name.trim();
-    if (location !== undefined) updateData.location = location?.trim();
-    if (resolution) updateData.resolution = resolution;
-    if (assignedPlaylistId !== undefined) {
-      updateData.assignedPlaylistId = assignedPlaylistId || null;
+    const { name, email, role, password } = req.body;
+    const updateData = { name, email, role };
+
+    if (password) {
+      const bcrypt = require('bcryptjs');
+      updateData.password = await bcrypt.hash(password, 10);
     }
 
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      updateData,
-      { new: true }
-    ).populate('assignedPlaylistId');
-    
-    if (!device) {
-      return res.status(404).json({ error: 'Dispositivo não encontrado' });
-    }
-
-    console.log(`📱 Dispositivo atualizado: ${device.name}`);
-    res.json(device);
+    const updatedUser = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    res.json(updatedUser);
   } catch (error) {
-    console.error('Erro ao atualizar dispositivo:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.delete('/api/devices/:id', authenticateToken, async (req, res) => {
+app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   try {
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      { isActive: false },
-      { new: true }
-    );
-    
-    if (!device) {
-      return res.status(404).json({ error: 'Dispositivo não encontrado' });
-    }
-    
-    console.log(`📱 Dispositivo removido: ${device.name}`);
-    res.json({ message: 'Dispositivo removido com sucesso' });
+    await User.findByIdAndUpdate(req.params.id, { isActive: false });
+    res.status(204).send();
   } catch (error) {
-    console.error('Erro ao remover dispositivo:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// Heartbeat para monitoramento de TVs
-app.post('/api/devices/:id/heartbeat', async (req, res) => {
-  try {
-    const { userAgent, screenSize } = req.body;
-    
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      { 
-        lastSeenAt: new Date(),
-        status: 'online',
-        'metadata.userAgent': userAgent,
-        'metadata.ipAddress': req.ip,
-        'metadata.screenSize': screenSize
-      },
-      { new: true }
-    );
-
-    if (!device) {
-      return res.status(404).json({ error: 'Dispositivo não encontrado' });
-    }
-    
-    res.json({ 
-      message: 'Heartbeat recebido', 
-      status: 'online',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Erro no heartbeat:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// Heartbeat por token (para as TVs)
-app.post('/api/devices/token/:token/heartbeat', async (req, res) => {
-  try {
-    const { userAgent, screenSize } = req.body;
-    
-    const device = await Device.findOneAndUpdate(
-      { deviceToken: req.params.token, isActive: true },
-      { 
-        lastSeenAt: new Date(),
-        status: 'online',
-        'metadata.userAgent': userAgent,
-        'metadata.ipAddress': req.ip,
-        'metadata.screenSize': screenSize
-      },
-      { new: true }
-    );
-
-    if (!device) {
-      return res.status(404).json({ error: 'Dispositivo não encontrado' });
-    }
-    
-    res.json({ 
-      message: 'Heartbeat recebido', 
-      status: 'online',
-      device: device.name,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Erro no heartbeat por token:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// Atribuir playlist para todos os dispositivos
-app.post('/api/devices/broadcast-assign', authenticateToken, async (req, res) => {
-  try {
-    const { playlistId } = req.body;
-    
-    const result = await Device.updateMany(
-      { isActive: true },
-      { assignedPlaylistId: playlistId || null }
-    );
-    
-    const devices = await Device.find({ isActive: true }).populate('assignedPlaylistId');
-    
-    console.log(`📡 Playlist ${playlistId || 'removida'} atribuída a ${result.modifiedCount} dispositivos`);
-    res.json({ 
-      message: `Playlist atribuída a ${result.modifiedCount} dispositivos`, 
-      devices 
-    });
-  } catch (error) {
-    console.error('Erro na atribuição broadcast:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-// ROTAS DE MÍDIA
+// ROTAS DE MÍDIA (CRUD)
 app.get('/api/media', authenticateToken, async (req, res) => {
   try {
-    const { page = 1, limit = 50, search, type } = req.query;
-    
-    const query = { isActive: true };
-    
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { originalName: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
-      ];
-    }
-    
-    if (type) {
-      query.mimetype = { $regex: `^${type}/`, $options: 'i' };
-    }
-    
-    const media = await Media.find(query)
-      .populate('uploadedBy', 'name email')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    
-    const total = await Media.countDocuments(query);
-    
-    res.json({
-      media,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
+    const media = await Media.find({ isActive: true }).sort({ createdAt: -1 });
+    res.json(media);
   } catch (error) {
-    console.error('Erro ao listar mídias:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -765,49 +596,24 @@ app.post('/api/media', authenticateToken, upload.single('file'), async (req, res
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
-    const { name, tags } = req.body;
+    const { name, duration, resolution, tags } = req.body;
     
-    const media = new Media({
-      name: name?.trim() || req.file.originalname,
+    const newMedia = new Media({
+      name: name || req.file.originalname,
       filename: req.file.filename,
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
       size: req.file.size,
+      duration: duration || 0,
+      resolution: resolution || null,
       tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
       uploadedBy: req.user.userId
     });
 
-    await media.save();
-    await media.populate('uploadedBy', 'name email');
-    
-    console.log(`📁 Nova mídia enviada: ${media.name} (${(media.size / 1024 / 1024).toFixed(2)} MB)`);
-    res.status(201).json(media);
+    await newMedia.save();
+    res.status(201).json(newMedia);
   } catch (error) {
     console.error('Erro no upload:', error);
-    
-    // Limpar arquivo em caso de erro
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    res.status(500).json({ error: 'Erro no upload do arquivo' });
-  }
-});
-
-app.get('/api/media/:id', authenticateToken, async (req, res) => {
-  try {
-    const media = await Media.findOne({ 
-      _id: req.params.id, 
-      isActive: true 
-    }).populate('uploadedBy', 'name email');
-    
-    if (!media) {
-      return res.status(404).json({ error: 'Mídia não encontrada' });
-    }
-    
-    res.json(media);
-  } catch (error) {
-    console.error('Erro ao buscar mídia:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -815,99 +621,44 @@ app.get('/api/media/:id', authenticateToken, async (req, res) => {
 app.put('/api/media/:id', authenticateToken, async (req, res) => {
   try {
     const { name, tags } = req.body;
-    
-    const updateData = {};
-    if (name) updateData.name = name.trim();
-    if (tags !== undefined) {
-      updateData.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
-    }
-    
-    const media = await Media.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      updateData,
-      { new: true }
-    ).populate('uploadedBy', 'name email');
-    
-    if (!media) {
-      return res.status(404).json({ error: 'Mídia não encontrada' });
-    }
-    
-    res.json(media);
+    const updateData = { name, tags: tags ? tags.split(',').map(tag => tag.trim()) : [] };
+    const updatedMedia = await Media.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    res.json(updatedMedia);
   } catch (error) {
-    console.error('Erro ao atualizar mídia:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 app.delete('/api/media/:id', authenticateToken, async (req, res) => {
   try {
-    const media = await Media.findOne({ _id: req.params.id, isActive: true });
-    
+    const media = await Media.findById(req.params.id);
     if (!media) {
       return res.status(404).json({ error: 'Mídia não encontrada' });
     }
 
-    // Verificar se a mídia está sendo usada em alguma playlist
-    const playlistsUsingMedia = await Playlist.find({
-      'media.mediaId': media._id,
-      isActive: true
-    });
-    
-    if (playlistsUsingMedia.length > 0) {
-      return res.status(400).json({ 
-        error: 'Mídia está sendo usada em playlists ativas',
-        playlists: playlistsUsingMedia.map(p => p.name)
-      });
-    }
-
-    // Remover arquivo físico
-    const filePath = path.join(uploadsDir, media.filename);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    // Marcar como inativa
+    // Soft delete
     media.isActive = false;
     await media.save();
-    
-    console.log(`🗑️ Mídia removida: ${media.name}`);
-    res.json({ message: 'Mídia removida com sucesso' });
+
+    // Opcional: remover arquivo físico após um tempo
+    // fs.unlink(path.join(uploadsDir, media.filename), (err) => {
+    //   if (err) console.error('Erro ao remover arquivo físico:', err);
+    // });
+
+    res.status(204).send();
   } catch (error) {
-    console.error('Erro ao remover mídia:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// ROTAS DE PLAYLISTS
+// ROTAS DE PLAYLISTS (CRUD)
 app.get('/api/playlists', authenticateToken, async (req, res) => {
   try {
     const playlists = await Playlist.find({ isActive: true })
-      .populate({
-        path: 'media.mediaId',
-        match: { isActive: true }
-      })
-      .populate('createdBy', 'name email')
+      .populate('media.mediaId')
       .sort({ createdAt: -1 });
-    
-    // Calcular duração total e filtrar mídias inativas
-    const processedPlaylists = playlists.map(playlist => {
-      const activeMedia = playlist.media.filter(item => item.mediaId);
-      let totalDuration = 0;
-      
-      activeMedia.forEach(item => {
-        totalDuration += item.duration || item.mediaId?.duration || 0;
-      });
-      
-      return {
-        ...playlist.toObject(),
-        media: activeMedia,
-        totalDuration
-      };
-    });
-    
-    res.json(processedPlaylists);
+    res.json(playlists);
   } catch (error) {
-    console.error('Erro ao listar playlists:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -915,74 +666,15 @@ app.get('/api/playlists', authenticateToken, async (req, res) => {
 app.post('/api/playlists', authenticateToken, async (req, res) => {
   try {
     const { name, description, media } = req.body;
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Nome da playlist é obrigatório' });
-    }
-    
-    // Validar mídias
-    const mediaItems = media || [];
-    let totalDuration = 0;
-    
-    for (let i = 0; i < mediaItems.length; i++) {
-      const item = mediaItems[i];
-      const mediaDoc = await Media.findOne({ _id: item.mediaId, isActive: true });
-      
-      if (!mediaDoc) {
-        return res.status(400).json({ 
-          error: `Mídia não encontrada: ${item.mediaId}` 
-        });
-      }
-      
-      item.order = i;
-      totalDuration += item.duration || mediaDoc.duration || 0;
-    }
-    
-    const playlist = new Playlist({
-      name: name.trim(),
-      description: description?.trim(),
-      media: mediaItems,
-      totalDuration,
-      createdBy: req.user.userId
+    const newPlaylist = new Playlist({ 
+      name, 
+      description, 
+      media, 
+      createdBy: req.user.userId 
     });
-
-    await playlist.save();
-    await playlist.populate([
-      { path: 'media.mediaId' },
-      { path: 'createdBy', select: 'name email' }
-    ]);
-    
-    console.log(`📋 Nova playlist criada: ${playlist.name} (${mediaItems.length} mídias)`);
-    res.status(201).json(playlist);
+    await newPlaylist.save();
+    res.status(201).json(newPlaylist);
   } catch (error) {
-    console.error('Erro ao criar playlist:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
-
-app.get('/api/playlists/:id', authenticateToken, async (req, res) => {
-  try {
-    const playlist = await Playlist.findOne({ 
-      _id: req.params.id, 
-      isActive: true 
-    })
-    .populate({
-      path: 'media.mediaId',
-      match: { isActive: true }
-    })
-    .populate('createdBy', 'name email');
-    
-    if (!playlist) {
-      return res.status(404).json({ error: 'Playlist não encontrada' });
-    }
-    
-    // Filtrar mídias inativas
-    const activeMedia = playlist.media.filter(item => item.mediaId);
-    playlist.media = activeMedia;
-    
-    res.json(playlist);
-  } catch (error) {
-    console.error('Erro ao buscar playlist:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -990,88 +682,122 @@ app.get('/api/playlists/:id', authenticateToken, async (req, res) => {
 app.put('/api/playlists/:id', authenticateToken, async (req, res) => {
   try {
     const { name, description, media } = req.body;
-    
-    const updateData = {};
-    if (name) updateData.name = name.trim();
-    if (description !== undefined) updateData.description = description?.trim();
-    
-    if (media) {
-      // Validar e processar mídias
-      let totalDuration = 0;
-      
-      for (let i = 0; i < media.length; i++) {
-        const item = media[i];
-        const mediaDoc = await Media.findOne({ _id: item.mediaId, isActive: true });
-        
-        if (!mediaDoc) {
-          return res.status(400).json({ 
-            error: `Mídia não encontrada: ${item.mediaId}` 
-          });
-        }
-        
-        item.order = i;
-        totalDuration += item.duration || mediaDoc.duration || 0;
-      }
-      
-      updateData.media = media;
-      updateData.totalDuration = totalDuration;
-    }
-    
-    const playlist = await Playlist.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      updateData,
+    const updatedPlaylist = await Playlist.findByIdAndUpdate(
+      req.params.id,
+      { name, description, media },
       { new: true }
-    ).populate([
-      { path: 'media.mediaId' },
-      { path: 'createdBy', select: 'name email' }
-    ]);
-
-    if (!playlist) {
-      return res.status(404).json({ error: 'Playlist não encontrada' });
-    }
-    
-    console.log(`📋 Playlist atualizada: ${playlist.name}`);
-    res.json(playlist);
+    );
+    res.json(updatedPlaylist);
   } catch (error) {
-    console.error('Erro ao atualizar playlist:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 app.delete('/api/playlists/:id', authenticateToken, async (req, res) => {
   try {
-    // Verificar se a playlist está sendo usada por algum dispositivo
-    const devicesUsingPlaylist = await Device.find({
-      assignedPlaylistId: req.params.id,
-      isActive: true
-    });
-    
-    if (devicesUsingPlaylist.length > 0) {
-      return res.status(400).json({ 
-        error: 'Playlist está sendo usada por dispositivos ativos',
-        devices: devicesUsingPlaylist.map(d => d.name)
-      });
-    }
-    
-    const playlist = await Playlist.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      { isActive: false },
-      { new: true }
-    );
-    
-    if (!playlist) {
-      return res.status(404).json({ error: 'Playlist não encontrada' });
-    }
-    
-    console.log(`🗑️ Playlist removida: ${playlist.name}`);
-    res.json({ message: 'Playlist removida com sucesso' });
+    await Playlist.findByIdAndUpdate(req.params.id, { isActive: false });
+    res.status(204).send();
   } catch (error) {
-    console.error('Erro ao remover playlist:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-// ROTA DO PLAYER PARA TVs
+// ROTAS DE DISPOSITIVOS (CRUD)
+app.get('/api/devices', authenticateToken, async (req, res) => {
+  try {
+    const devices = await Device.find({ isActive: true })
+      .populate('assignedPlaylistId', 'name')
+      .sort({ lastSeenAt: -1 });
+    res.json(devices);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+app.post('/api/devices', authenticateToken, async (req, res) => {
+  try {
+    const { name, location, resolution } = req.body;
+    const newDevice = new Device({ 
+      name, 
+      location, 
+      resolution,
+      deviceToken: uuidv4()
+    });
+    await newDevice.save();
+    res.status(201).json(newDevice);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+app.put('/api/devices/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, location, resolution, assignedPlaylistId } = req.body;
+    const updatedDevice = await Device.findByIdAndUpdate(
+      req.params.id,
+      { name, location, resolution, assignedPlaylistId: assignedPlaylistId || null },
+      { new: true }
+    );
+    res.json(updatedDevice);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+app.delete('/api/devices/:id', authenticateToken, async (req, res) => {
+  try {
+    await Device.findByIdAndUpdate(req.params.id, { isActive: false });
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Rota para atribuir playlist a múltiplos dispositivos
+app.post('/api/devices/assign-playlist', authenticateToken, async (req, res) => {
+  try {
+    const { deviceIds, playlistId } = req.body;
+    await Device.updateMany(
+      { _id: { $in: deviceIds } },
+      { $set: { assignedPlaylistId: playlistId } }
+    );
+    res.json({ message: 'Playlist atribuída com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Rota de heartbeat para dispositivos
+app.post('/api/devices/token/:deviceToken/heartbeat', async (req, res) => {
+  try {
+    const { deviceToken } = req.params;
+    const { userAgent, screenSize } = req.body;
+    
+    const update = await Device.findOneAndUpdate(
+      { deviceToken },
+      { 
+        lastSeenAt: new Date(), 
+        status: 'online',
+        'metadata.userAgent': userAgent,
+        'metadata.screenSize': screenSize,
+        'metadata.ipAddress': req.ip
+      },
+      { new: true }
+    );
+
+    if (!update) {
+      return res.status(404).json({ message: 'Dispositivo não encontrado' });
+    }
+
+    res.json({ message: 'Heartbeat recebido' });
+  } catch (error) {
+    console.error('Erro no heartbeat:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ROTA DO PLAYER (substituída pela versão otimizada abaixo)
+
 app.get('/player/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
@@ -1156,22 +882,6 @@ app.get('/player/:deviceToken', async (req, res) => {
           object-fit: cover; display: block;
         }
         
-        .info { 
-          position: fixed; top: 20px; left: 20px; 
-          color: white; background: rgba(0,0,0,0.8); 
-          padding: 15px 20px; border-radius: 10px; 
-          font-size: 14px; z-index: 1000; 
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .info h3 { margin-bottom: 8px; color: #4CAF50; }
-        .info div { margin-bottom: 4px; }
-        .info strong { color: #fff; }
-        .info .status { color: #4CAF50; }
-        .info .status.loading { color: #FF9800; }
-        .info .status.error { color: #f44336; }
-        
         .no-content {
           display: flex; align-items: center; justify-content: center;
           width: 100vw; height: 100vh; color: white; text-align: center;
@@ -1205,16 +915,6 @@ app.get('/player/:deviceToken', async (req, res) => {
       </style>
     </head>
     <body>
-      <div class="info">
-        <h3>📺 Tritotem Player v2.0</h3>
-        <div><strong>Dispositivo:</strong> ${device.name}</div>
-        <div><strong>Local:</strong> ${device.location || 'Não definido'}</div>
-        <div><strong>Status:</strong> <span id="status" class="status loading">Inicializando...</span></div>
-        <div><strong>Playlist:</strong> ${playlistName}</div>
-        <div><strong>Mídias:</strong> ${playlist.length}</div>
-        <div><strong>Resolução:</strong> ${device.resolution}</div>
-      </div>
-      
       <div id="loading" class="loading">
         <div class="spinner"></div>
         <p>Carregando conteúdo...</p>
@@ -1239,12 +939,21 @@ app.get('/player/:deviceToken', async (req, res) => {
       `}
       
       <script>
+        // ==================== CONFIGURAÇÃO ====================
+        const DB_NAME = 'TritotemCache';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'videos';
+        const CACHE_EXPIRY_DAYS = 7;
+        
+        // ==================== VARIÁVEIS GLOBAIS ====================
+        let db = null;
         const player = document.getElementById('player');
-        const status = document.getElementById('status');
         const loading = document.getElementById('loading');
         const playlist = ${JSON.stringify(playlist)};
         
         let currentIndex = 0;
+        let nextVideoBlob = null;
+        let isPreloading = false;
         let heartbeatInterval;
         let reloadTimeout;
         
@@ -1258,29 +967,201 @@ app.get('/player/:deviceToken', async (req, res) => {
           retryDelay: 5000
         };
         
-        function updateStatus(message, type = 'status') {
-          if (status) {
-            status.textContent = message;
-            status.className = 'status ' + type;
-          }
-          console.log('[Tritotem]', message);
+        // ==================== INDEXEDDB ====================
+        async function initDB() {
+          return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+              db = request.result;
+              console.log('[Cache] IndexedDB inicializado');
+              resolve(db);
+            };
+            
+            request.onupgradeneeded = (event) => {
+              const db = event.target.result;
+              if (!db.objectStoreNames.contains(STORE_NAME)) {
+                const store = db.createObjectStore(STORE_NAME, { keyPath: 'filename' });
+                store.createIndex('timestamp', 'timestamp', { unique: false });
+                console.log('[Cache] Object store criado');
+              }
+            };
+          });
         }
         
-        function hideLoading() {
-          if (loading) {
-            loading.classList.add('hidden');
+        async function getCachedVideo(filename) {
+          if (!db) return null;
+          
+          return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.get(filename);
+            
+            request.onsuccess = () => {
+              const result = request.result;
+              if (!result) {
+                resolve(null);
+                return;
+              }
+              
+              // Verificar expiração
+              const age = Date.now() - result.timestamp;
+              const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+              
+              if (age > maxAge) {
+                console.log('[Cache] Vídeo expirado:', filename);
+                deleteCachedVideo(filename);
+                resolve(null);
+              } else {
+                console.log('[Cache] Vídeo encontrado no cache:', filename);
+                resolve(result.blob);
+              }
+            };
+            
+            request.onerror = () => reject(request.error);
+          });
+        }
+        
+        async function cacheVideo(filename, blob) {
+          if (!db) return false;
+          
+          return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            
+            const data = {
+              filename: filename,
+              blob: blob,
+              timestamp: Date.now()
+            };
+            
+            const request = store.put(data);
+            
+            request.onsuccess = () => {
+              console.log('[Cache] Vídeo armazenado:', filename);
+              resolve(true);
+            };
+            
+            request.onerror = () => {
+              console.error('[Cache] Erro ao armazenar:', request.error);
+              reject(request.error);
+            };
+          });
+        }
+        
+        async function deleteCachedVideo(filename) {
+          if (!db) return false;
+          
+          return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.delete(filename);
+            
+            request.onsuccess = () => {
+              console.log('[Cache] Vídeo removido do cache:', filename);
+              resolve(true);
+            };
+            
+            request.onerror = () => reject(request.error);
+          });
+        }
+        
+        async function clearOldCache() {
+          if (!db) return;
+          
+          const transaction = db.transaction([STORE_NAME], 'readwrite');
+          const store = transaction.objectStore(STORE_NAME);
+          const index = store.index('timestamp');
+          const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+          const cutoff = Date.now() - maxAge;
+          
+          const request = index.openCursor();
+          
+          request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+              if (cursor.value.timestamp < cutoff) {
+                cursor.delete();
+                console.log('[Cache] Removido vídeo antigo:', cursor.value.filename);
+              }
+              cursor.continue();
+            }
+          };
+        }
+        
+        // ==================== DOWNLOAD E CACHE ====================
+        async function downloadAndCacheVideo(filename, url) {
+          try {
+            console.log('[Download] Baixando:', filename);
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              throw new Error('Erro ao baixar vídeo: ' + response.status);
+            }
+            
+            const blob = await response.blob();
+            console.log('[Download] Concluído:', filename, '(' + (blob.size / 1024 / 1024).toFixed(2) + ' MB)');
+            
+            // Armazenar no cache
+            await cacheVideo(filename, blob);
+            
+            return blob;
+          } catch (error) {
+            console.error('[Download] Erro:', error);
+            return null;
           }
+        }
+        
+        async function getVideoBlob(filename, url) {
+          // Tentar obter do cache primeiro
+          let blob = await getCachedVideo(filename);
+          
+          if (blob) {
+            console.log('[Video] Usando cache para:', filename);
+            return blob;
+          }
+          
+          // Se não estiver no cache, baixar
+          console.log('[Video] Não encontrado no cache, baixando:', filename);
+          blob = await downloadAndCacheVideo(filename, url);
+          
+          return blob;
+        }
+        
+        // ==================== PRÉ-CARREGAMENTO ====================
+        async function preloadNextVideo() {
+          if (isPreloading || playlist.length === 0) return;
+          
+          isPreloading = true;
+          const nextIndex = (currentIndex + 1) % playlist.length;
+          const nextMedia = playlist[nextIndex];
+          
+          if (!nextMedia || !nextMedia.mediaId) {
+            isPreloading = false;
+            return;
+          }
+          
+          console.log('[Preload] Pré-carregando próximo vídeo:', nextMedia.mediaId.name);
+          
+          const videoUrl = config.baseUrl + '/stream/' + nextMedia.mediaId.filename;
+          nextVideoBlob = await getVideoBlob(nextMedia.mediaId.filename, videoUrl);
+          
+          isPreloading = false;
+          console.log('[Preload] Próximo vídeo pronto');
+        }
+        
+        // ==================== PLAYER ====================
+        function hideLoading() {
+          if (loading) loading.classList.add('hidden');
         }
         
         function showLoading() {
-          if (loading) {
-            loading.classList.remove('hidden');
-          }
+          if (loading) loading.classList.remove('hidden');
         }
         
-        function playNext() {
+        async function playNext() {
           if (playlist.length === 0) {
-            updateStatus('Aguardando playlist', 'loading');
             hideLoading();
             return;
           }
@@ -1294,13 +1175,39 @@ app.get('/player/:deviceToken', async (req, res) => {
           
           if (player) {
             showLoading();
-            updateStatus('Carregando: ' + media.mediaId.name, 'loading');
             
-            const videoUrl = config.baseUrl + '/stream/' + media.mediaId.filename;
-            player.src = videoUrl;
+            console.log('[Player] Reproduzindo:', media.mediaId.name);
             
-            // Próximo vídeo
+            // Usar blob pré-carregado se disponível
+            let blob = nextVideoBlob;
+            nextVideoBlob = null;
+            
+            // Se não houver blob pré-carregado, obter agora
+            if (!blob) {
+              const videoUrl = config.baseUrl + '/stream/' + media.mediaId.filename;
+              blob = await getVideoBlob(media.mediaId.filename, videoUrl);
+            }
+            
+            if (blob) {
+              const blobUrl = URL.createObjectURL(blob);
+              player.src = blobUrl;
+              
+              // Liberar URL anterior
+              player.addEventListener('loadeddata', () => {
+                URL.revokeObjectURL(blobUrl);
+              }, { once: true });
+            } else {
+              console.error('[Player] Erro ao obter vídeo');
+              currentIndex = (currentIndex + 1) % playlist.length;
+              setTimeout(playNext, 3000);
+              return;
+            }
+            
+            // Avançar índice
             currentIndex = (currentIndex + 1) % playlist.length;
+            
+            // Pré-carregar próximo vídeo
+            setTimeout(preloadNextVideo, 2000);
           }
         }
         
@@ -1331,121 +1238,70 @@ app.get('/player/:deviceToken', async (req, res) => {
             return;
           }
           
-          player.addEventListener('loadstart', () => {
-            updateStatus('Carregando vídeo...', 'loading');
-          });
-          
           player.addEventListener('canplay', () => {
             hideLoading();
-            updateStatus('Reproduzindo', 'status');
+            console.log('[Player] Vídeo pronto para reprodução');
           });
           
           player.addEventListener('playing', () => {
             hideLoading();
-            updateStatus('Reproduzindo', 'status');
+            console.log('[Player] Reproduzindo');
           });
           
           player.addEventListener('ended', () => {
-            updateStatus('Próximo vídeo...', 'loading');
-            setTimeout(playNext, 1000);
+            console.log('[Player] Vídeo finalizado, próximo...');
+            setTimeout(playNext, 500);
           });
           
           player.addEventListener('error', (e) => {
             console.error('[Player] Erro:', e);
-            updateStatus('Erro no vídeo', 'error');
             hideLoading();
-            
-            // Tentar próximo vídeo após delay
             setTimeout(playNext, config.retryDelay);
           });
           
-          player.addEventListener('stalled', () => {
-            updateStatus('Conexão lenta...', 'loading');
-          });
-          
           player.addEventListener('waiting', () => {
-            updateStatus('Buffering...', 'loading');
+            console.log('[Player] Buffering...');
           });
           
           // Iniciar reprodução
           setTimeout(playNext, 2000);
         }
         
-        function init() {
-          updateStatus('Inicializando...', 'loading');
-          
-          // Configurar player
-          setupPlayer();
-          
-          // Iniciar heartbeat
-          sendHeartbeat();
-          heartbeatInterval = setInterval(sendHeartbeat, config.heartbeatInterval);
-          
-          // Reload automático
-          reloadTimeout = setTimeout(() => {
-            console.log('[System] Reload automático');
-            location.reload();
-          }, config.reloadInterval);
-          
-          // Detectar perda de foco e recarregar
-          document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-              console.log('[System] Página voltou ao foco');
-              setTimeout(() => location.reload(), 2000);
-            }
-          });
-          
-          updateStatus('Sistema pronto', 'status');
+        async function init() {
+          console.log('[Tritotem] Player inicializado');
+          try {
+            await initDB();
+            clearOldCache();
+            setupPlayer();
+            
+            // Iniciar heartbeat
+            sendHeartbeat();
+            heartbeatInterval = setInterval(sendHeartbeat, config.heartbeatInterval);
+            
+            // Recarregar a página periodicamente para buscar atualizações
+            reloadTimeout = setTimeout(() => window.location.reload(), config.reloadInterval);
+            
+          } catch (error) {
+            console.error('[Tritotem] Erro na inicialização:', error);
+          }
         }
         
-        // Cleanup ao sair
-        window.addEventListener('beforeunload', () => {
-          if (heartbeatInterval) clearInterval(heartbeatInterval);
-          if (reloadTimeout) clearTimeout(reloadTimeout);
-        });
+        // Iniciar tudo
+        window.onload = init;
         
-        // Inicializar quando DOM estiver pronto
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', init);
-        } else {
-          init();
-        }
-        
-        // Log de informações do sistema
-        console.log('[Tritotem] Player v2.0 iniciado');
-        console.log('[Device]', '${device.name}', '(${deviceToken})');
-        console.log('[Playlist]', '${playlistName}', '(${playlist.length} mídias)');
-        console.log('[Config]', config);
       </script>
     </body>
-    </html>`;
-    
+    </html>
+    `;
+
     res.send(html);
   } catch (error) {
-    console.error('Erro no player:', error);
-    res.status(500).send(`
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="UTF-8">
-        <title>Erro - Tritotem Player</title>
-        <style>
-          body { margin: 0; padding: 50px; background: #000; color: #fff; 
-                 text-align: center; font-family: Arial; }
-          h1 { color: #f44336; }
-        </style>
-      </head>
-      <body>
-        <h1>❌ Erro interno do servidor</h1>
-        <p>Não foi possível carregar o player.</p>
-        <p>Tente novamente em alguns instantes.</p>
-      </body>
-      </html>
-    `);
+    console.error('Erro na rota do player:', error);
+    res.status(500).send('Erro interno do servidor');
   }
 });
 
-// API para obter dados da playlist do dispositivo (para apps externos)
+// Rota de API para o player (deprecada, usar rota HTML acima)
 app.get('/api/player/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
