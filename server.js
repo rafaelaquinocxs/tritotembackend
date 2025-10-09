@@ -903,40 +903,61 @@ app.get('/player/:deviceToken', async (req, res) => {
           isPreloading=false;
         }
 
-        async function playNext(){
-          if(playlist.length===0)return;
-          const media=playlist[currentIndex];
-          if(!media||!media.mediaId){currentIndex=(currentIndex+1)%playlist.length;return playNext();}
-          showLoading();
-          let blob=nextVideoBlob;nextVideoBlob=null;
-          if(!blob){
-            const url=config.baseUrl+'/stream/'+media.mediaId.filename;
-            blob=await getVideoBlob(media.mediaId.filename,url);
-          }
-          if(blob){
-            const blobUrl=URL.createObjectURL(blob);
+        async function playNext() {
+          if (playlist.length === 0) return;
+          const media = playlist[currentIndex];
+          if (!media || !media.mediaId) {
+            currentIndex = (currentIndex + 1) % playlist.length;
+            return playNext();
+           }
+
+           // Só mostra loading no primeiro vídeo
+         if (currentIndex === 0) showLoading();
+
+          let blob = nextVideoBlob;
+          nextVideoBlob = null;
+
+          if (!blob) {
+            const url = config.baseUrl + '/stream/' + media.mediaId.filename;
+            blob = await getVideoBlob(media.mediaId.filename, url);
+            }
+
+          if (blob) {
+            const blobUrl = URL.createObjectURL(blob);
+
+    // Sempre esconde o loading logo após conseguir o blob
+            hideLoading();
+
             player.classList.remove("visible"); // fade out
-            setTimeout(()=>{
-              player.src=blobUrl;
-              player.onloadeddata=()=>{
+            setTimeout(() => {
+             player.src = blobUrl;
+
+      // quando o vídeo tiver carregado dados mínimos
+              player.onloadeddata = () => {
                 hideLoading();
                 player.classList.add("visible"); // fade in
               };
-              player.onended=()=>{
-                URL.revokeObjectURL(blobUrl);
-                currentIndex=(currentIndex+1)%playlist.length;
-                playNext();
-              };
-            },300);
-            preloadNextVideo();
-          }
-        }
 
-        function init(){
-          console.log("[Tritotem] Player inicializado");
-          if(player){playNext();}
-        }
-        window.onload=init;
+              player.onended = () => {
+                URL.revokeObjectURL(blobUrl);
+                currentIndex = (currentIndex + 1) % playlist.length;
+                 playNext();
+               };
+              }, 300);
+
+              preloadNextVideo();
+             }
+            }
+
+function init() {
+  console.log("[Tritotem] Player inicializado");
+  if (player) {
+    showLoading(); // garante spinner só no carregamento inicial
+    playNext();
+  }
+}
+window.onload = init;
+
       </script>
     </body>
     </html>
