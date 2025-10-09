@@ -1193,7 +1193,7 @@ app.get('/player/:deviceToken', async (req, res) => {
               player.src = blobUrl;
               
               // Liberar URL anterior
-              player.addEventListener('loadeddata', () => {
+              player.addEventListener('ended', () => {
                 URL.revokeObjectURL(blobUrl);
               }, { once: true });
             } else {
