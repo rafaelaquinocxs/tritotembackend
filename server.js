@@ -796,8 +796,7 @@ app.post('/api/devices/token/:deviceToken/heartbeat', async (req, res) => {
   }
 });
 
-// ROTA DO PLAYER (substituída pela versão otimizada abaixo)
-
+// ROTA DO PLAYER COM TRANSIÇÃO SUAVE
 app.get('/player/:deviceToken', async (req, res) => {
   try {
     const { deviceToken } = req.params;
@@ -817,38 +816,15 @@ app.get('/player/:deviceToken', async (req, res) => {
       return res.status(404).send(`
         <!DOCTYPE html>
         <html lang="pt-BR">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Dispositivo não encontrado - Tritotem</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              display: flex; align-items: center; justify-content: center;
-              min-height: 100vh; text-align: center;
-            }
-            .container { max-width: 500px; padding: 2rem; }
-            h1 { font-size: 3rem; margin-bottom: 1rem; }
-            p { font-size: 1.2rem; opacity: 0.9; margin-bottom: 0.5rem; }
-            .token { font-family: monospace; background: rgba(255,255,255,0.1); 
-                    padding: 0.5rem; border-radius: 4px; margin-top: 1rem; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>❌ Dispositivo não encontrado</h1>
-            <p>O token fornecido não corresponde a nenhum dispositivo ativo.</p>
-            <p>Entre em contato com o administrador do sistema.</p>
-            <div class="token">Token: ${deviceToken}</div>
-          </div>
+        <head><meta charset="UTF-8"><title>Dispositivo não encontrado</title></head>
+        <body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;">
+          <h1>❌ Dispositivo não encontrado</h1>
+          <p>Token: ${deviceToken}</p>
         </body>
         </html>
       `);
     }
 
-    // Atualizar status do dispositivo
     await Device.findByIdAndUpdate(device._id, { 
       lastSeenAt: new Date(), 
       status: 'online',
@@ -861,57 +837,33 @@ app.get('/player/:deviceToken', async (req, res) => {
       : 'http://localhost:3001';
 
     const playlist = device.assignedPlaylistId?.media?.filter(item => item.mediaId) || [];
-    const playlistName = device.assignedPlaylistId?.name || 'Nenhuma';
 
     const html = `
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Tritotem Player - ${device.name}</title>
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-          background: #000; overflow: hidden; 
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        * {margin:0;padding:0;box-sizing:border-box;}
+        body {background:#000;overflow:hidden;}
+        video {
+          width:100vw;height:100vh;object-fit:cover;display:block;
+          opacity:0;transition:opacity 0.7s ease;background:#000;
         }
-        
-        video { 
-          width: 100vw; height: 100vh; 
-          object-fit: cover; display: block;
-        }
-        
-        .no-content {
-          display: flex; align-items: center; justify-content: center;
-          width: 100vw; height: 100vh; color: white; text-align: center;
-          background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
-        }
-        
-        .no-content h1 { font-size: 4rem; margin-bottom: 1rem; }
-        .no-content h2 { font-size: 2rem; margin-bottom: 0.5rem; color: #4CAF50; }
-        .no-content p { font-size: 1.2rem; opacity: 0.8; }
-        
+        video.visible {opacity:1;}
         .loading {
-          position: fixed; top: 50%; left: 50%;
-          transform: translate(-50%, -50%);
-          color: white; text-align: center; z-index: 999;
+          position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+          color:#fff;text-align:center;z-index:999;
         }
-        
         .spinner {
-          border: 4px solid rgba(255,255,255,0.3);
-          border-top: 4px solid #4CAF50;
-          border-radius: 50%; width: 50px; height: 50px;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 20px;
+          border:4px solid rgba(255,255,255,0.3);
+          border-top:4px solid #4CAF50;
+          border-radius:50%;width:50px;height:50px;
+          animation:spin 1s linear infinite;margin:0 auto 20px;
         }
-        
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
-        .hidden { display: none !important; }
+        @keyframes spin {0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+        .hidden{display:none!important;}
       </style>
     </head>
     <body>
@@ -919,387 +871,83 @@ app.get('/player/:deviceToken', async (req, res) => {
         <div class="spinner"></div>
         <p>Carregando conteúdo...</p>
       </div>
-      
-      ${playlist.length === 0 ? `
-        <div class="no-content">
-          <div>
-            <h1>📺</h1>
-            <h2>Tritotem Player</h2>
-            <p><strong>${device.name}</strong></p>
-            <p>Aguardando conteúdo...</p>
-            <p style="margin-top: 2rem; font-size: 1rem; opacity: 0.6;">
-              Nenhuma playlist atribuída a este dispositivo
-            </p>
-          </div>
-        </div>
-      ` : `
-        <video id="player" autoplay muted preload="auto">
-          Seu navegador não suporta reprodução de vídeo HTML5.
-        </video>
+
+      ${playlist.length === 0 ? `<div style="color:white;text-align:center;">Nenhuma playlist atribuída</div>` : `
+        <video id="player" autoplay muted preload="auto"></video>
       `}
-      
+
       <script>
-        // ==================== CONFIGURAÇÃO ====================
-        const DB_NAME = 'TritotemCache';
-        const DB_VERSION = 1;
-        const STORE_NAME = 'videos';
-        const CACHE_EXPIRY_DAYS = 7;
-        
-        // ==================== VARIÁVEIS GLOBAIS ====================
-        let db = null;
+        const playlist = ${JSON.stringify(playlist)};
+        const config = { baseUrl: '${baseUrl}', deviceToken: '${deviceToken}' };
         const player = document.getElementById('player');
         const loading = document.getElementById('loading');
-        const playlist = ${JSON.stringify(playlist)};
-        
-        let currentIndex = 0;
-        let nextVideoBlob = null;
-        let isPreloading = false;
-        let heartbeatInterval;
-        let reloadTimeout;
-        
-        // Configurações
-        const config = {
-          baseUrl: '${baseUrl}',
-          deviceId: '${device._id}',
-          deviceToken: '${deviceToken}',
-          heartbeatInterval: ${device.heartbeatInterval || 30000},
-          reloadInterval: 10 * 60 * 1000, // 10 minutos
-          retryDelay: 5000
-        };
-        
-        // ==================== INDEXEDDB ====================
-        async function initDB() {
-          return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
-            
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-              db = request.result;
-              console.log('[Cache] IndexedDB inicializado');
-              resolve(db);
-            };
-            
-            request.onupgradeneeded = (event) => {
-              const db = event.target.result;
-              if (!db.objectStoreNames.contains(STORE_NAME)) {
-                const store = db.createObjectStore(STORE_NAME, { keyPath: 'filename' });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-                console.log('[Cache] Object store criado');
-              }
-            };
-          });
+        let currentIndex = 0, nextVideoBlob = null, isPreloading = false;
+
+        function hideLoading(){loading && loading.classList.add('hidden');}
+        function showLoading(){loading && loading.classList.remove('hidden');}
+
+        async function getVideoBlob(filename, url){
+          const res = await fetch(url);
+          return res.ok ? await res.blob() : null;
         }
-        
-        async function getCachedVideo(filename) {
-          if (!db) return null;
-          
-          return new Promise((resolve, reject) => {
-            const transaction = db.transaction([STORE_NAME], 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.get(filename);
-            
-            request.onsuccess = () => {
-              const result = request.result;
-              if (!result) {
-                resolve(null);
-                return;
-              }
-              
-              // Verificar expiração
-              const age = Date.now() - result.timestamp;
-              const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-              
-              if (age > maxAge) {
-                console.log('[Cache] Vídeo expirado:', filename);
-                deleteCachedVideo(filename);
-                resolve(null);
-              } else {
-                console.log('[Cache] Vídeo encontrado no cache:', filename);
-                resolve(result.blob);
-              }
-            };
-            
-            request.onerror = () => reject(request.error);
-          });
-        }
-        
-        async function cacheVideo(filename, blob) {
-          if (!db) return false;
-          
-          return new Promise((resolve, reject) => {
-            const transaction = db.transaction([STORE_NAME], 'readwrite');
-            const store = transaction.objectStore(STORE_NAME);
-            
-            const data = {
-              filename: filename,
-              blob: blob,
-              timestamp: Date.now()
-            };
-            
-            const request = store.put(data);
-            
-            request.onsuccess = () => {
-              console.log('[Cache] Vídeo armazenado:', filename);
-              resolve(true);
-            };
-            
-            request.onerror = () => {
-              console.error('[Cache] Erro ao armazenar:', request.error);
-              reject(request.error);
-            };
-          });
-        }
-        
-        async function deleteCachedVideo(filename) {
-          if (!db) return false;
-          
-          return new Promise((resolve, reject) => {
-            const transaction = db.transaction([STORE_NAME], 'readwrite');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.delete(filename);
-            
-            request.onsuccess = () => {
-              console.log('[Cache] Vídeo removido do cache:', filename);
-              resolve(true);
-            };
-            
-            request.onerror = () => reject(request.error);
-          });
-        }
-        
-        async function clearOldCache() {
-          if (!db) return;
-          
-          const transaction = db.transaction([STORE_NAME], 'readwrite');
-          const store = transaction.objectStore(STORE_NAME);
-          const index = store.index('timestamp');
-          const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-          const cutoff = Date.now() - maxAge;
-          
-          const request = index.openCursor();
-          
-          request.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-              if (cursor.value.timestamp < cutoff) {
-                cursor.delete();
-                console.log('[Cache] Removido vídeo antigo:', cursor.value.filename);
-              }
-              cursor.continue();
-            }
-          };
-        }
-        
-        // ==================== DOWNLOAD E CACHE ====================
-        async function downloadAndCacheVideo(filename, url) {
-          try {
-            console.log('[Download] Baixando:', filename);
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-              throw new Error('Erro ao baixar vídeo: ' + response.status);
-            }
-            
-            const blob = await response.blob();
-            console.log('[Download] Concluído:', filename, '(' + (blob.size / 1024 / 1024).toFixed(2) + ' MB)');
-            
-            // Armazenar no cache
-            await cacheVideo(filename, blob);
-            
-            return blob;
-          } catch (error) {
-            console.error('[Download] Erro:', error);
-            return null;
+
+        async function preloadNextVideo(){
+          if(isPreloading||playlist.length===0)return;
+          isPreloading=true;
+          const nextIndex=(currentIndex+1)%playlist.length;
+          const media=playlist[nextIndex];
+          if(media && media.mediaId){
+            const url=config.baseUrl+'/stream/'+media.mediaId.filename;
+            nextVideoBlob=await getVideoBlob(media.mediaId.filename,url);
           }
+          isPreloading=false;
         }
-        
-        async function getVideoBlob(filename, url) {
-          // Tentar obter do cache primeiro
-          let blob = await getCachedVideo(filename);
-          
-          if (blob) {
-            console.log('[Video] Usando cache para:', filename);
-            return blob;
+
+        async function playNext(){
+          if(playlist.length===0)return;
+          const media=playlist[currentIndex];
+          if(!media||!media.mediaId){currentIndex=(currentIndex+1)%playlist.length;return playNext();}
+          showLoading();
+          let blob=nextVideoBlob;nextVideoBlob=null;
+          if(!blob){
+            const url=config.baseUrl+'/stream/'+media.mediaId.filename;
+            blob=await getVideoBlob(media.mediaId.filename,url);
           }
-          
-          // Se não estiver no cache, baixar
-          console.log('[Video] Não encontrado no cache, baixando:', filename);
-          blob = await downloadAndCacheVideo(filename, url);
-          
-          return blob;
-        }
-        
-        // ==================== PRÉ-CARREGAMENTO ====================
-        async function preloadNextVideo() {
-          if (isPreloading || playlist.length === 0) return;
-          
-          isPreloading = true;
-          const nextIndex = (currentIndex + 1) % playlist.length;
-          const nextMedia = playlist[nextIndex];
-          
-          if (!nextMedia || !nextMedia.mediaId) {
-            isPreloading = false;
-            return;
-          }
-          
-          console.log('[Preload] Pré-carregando próximo vídeo:', nextMedia.mediaId.name);
-          
-          const videoUrl = config.baseUrl + '/stream/' + nextMedia.mediaId.filename;
-          nextVideoBlob = await getVideoBlob(nextMedia.mediaId.filename, videoUrl);
-          
-          isPreloading = false;
-          console.log('[Preload] Próximo vídeo pronto');
-        }
-        
-        // ==================== PLAYER ====================
-        function hideLoading() {
-          if (loading) loading.classList.add('hidden');
-        }
-        
-        function showLoading() {
-          if (loading) loading.classList.remove('hidden');
-        }
-        
-        async function playNext() {
-          if (playlist.length === 0) {
-            hideLoading();
-            return;
-          }
-          
-          const media = playlist[currentIndex];
-          if (!media || !media.mediaId) {
-            currentIndex = (currentIndex + 1) % playlist.length;
-            setTimeout(playNext, 1000);
-            return;
-          }
-          
-          if (player) {
-            showLoading();
-            
-            console.log('[Player] Reproduzindo:', media.mediaId.name);
-            
-            // Usar blob pré-carregado se disponível
-            let blob = nextVideoBlob;
-            nextVideoBlob = null;
-            
-            // Se não houver blob pré-carregado, obter agora
-            if (!blob) {
-              const videoUrl = config.baseUrl + '/stream/' + media.mediaId.filename;
-              blob = await getVideoBlob(media.mediaId.filename, videoUrl);
-            }
-            
-            if (blob) {
-              const blobUrl = URL.createObjectURL(blob);
-              player.src = blobUrl;
-              
-              // Liberar URL anterior
-              player.addEventListener('ended', () => {
+          if(blob){
+            const blobUrl=URL.createObjectURL(blob);
+            player.classList.remove("visible"); // fade out
+            setTimeout(()=>{
+              player.src=blobUrl;
+              player.onloadeddata=()=>{
+                hideLoading();
+                player.classList.add("visible"); // fade in
+              };
+              player.onended=()=>{
                 URL.revokeObjectURL(blobUrl);
-              }, { once: true });
-            } else {
-              console.error('[Player] Erro ao obter vídeo');
-              currentIndex = (currentIndex + 1) % playlist.length;
-              setTimeout(playNext, 3000);
-              return;
-            }
-            
-            // Avançar índice
-            currentIndex = (currentIndex + 1) % playlist.length;
-            
-            // Pré-carregar próximo vídeo
+                currentIndex=(currentIndex+1)%playlist.length;
+                playNext();
+              };
+            },300);
             preloadNextVideo();
           }
         }
-        
-        function sendHeartbeat() {
-          const heartbeatData = {
-            userAgent: navigator.userAgent,
-            screenSize: screen.width + 'x' + screen.height,
-            timestamp: new Date().toISOString()
-          };
-          
-          fetch(config.baseUrl + '/api/devices/token/' + config.deviceToken + '/heartbeat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(heartbeatData)
-          })
-          .then(response => response.json())
-          .then(data => {
-            console.log('[Heartbeat]', data.message);
-          })
-          .catch(error => {
-            console.error('[Heartbeat] Erro:', error);
-          });
+
+        function init(){
+          console.log("[Tritotem] Player inicializado");
+          if(player){playNext();}
         }
-        
-        function setupPlayer() {
-          if (!player || playlist.length === 0) {
-            hideLoading();
-            return;
-          }
-          
-          player.addEventListener('canplay', () => {
-            hideLoading();
-            console.log('[Player] Vídeo pronto para reprodução');
-          });
-          
-          player.addEventListener('playing', () => {
-            hideLoading();
-            console.log('[Player] Reproduzindo');
-          });
-          
-          player.addEventListener('ended', () => {
-            console.log('[Player] Vídeo finalizado, próximo...');
-            setTimeout(playNext, 500);
-          });
-          
-          player.addEventListener('error', (e) => {
-            console.error('[Player] Erro:', e);
-            hideLoading();
-            setTimeout(playNext, config.retryDelay);
-          });
-          
-          player.addEventListener('waiting', () => {
-            console.log('[Player] Buffering...');
-          });
-          
-          // Iniciar reprodução
-          setTimeout(playNext, 2000);
-        }
-        
-        async function init() {
-          console.log('[Tritotem] Player inicializado');
-          try {
-            await initDB();
-            clearOldCache();
-            setupPlayer();
-            
-            // Iniciar heartbeat
-            sendHeartbeat();
-            heartbeatInterval = setInterval(sendHeartbeat, config.heartbeatInterval);
-            
-            // Recarregar a página periodicamente para buscar atualizações
-            reloadTimeout = setTimeout(() => window.location.reload(), config.reloadInterval);
-            
-          } catch (error) {
-            console.error('[Tritotem] Erro na inicialização:', error);
-          }
-        }
-        
-        // Iniciar tudo
-        window.onload = init;
-        
+        window.onload=init;
       </script>
     </body>
     </html>
     `;
-
     res.send(html);
   } catch (error) {
-    console.error('Erro na rota do player:', error);
-    res.status(500).send('Erro interno do servidor');
+    console.error("Erro na rota do player:", error);
+    res.status(500).send("Erro interno do servidor");
   }
 });
+
 
 // Rota de API para o player (deprecada, usar rota HTML acima)
 app.get('/api/player/:deviceToken', async (req, res) => {
