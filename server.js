@@ -1207,7 +1207,7 @@ app.get('/player/:deviceToken', async (req, res) => {
             currentIndex = (currentIndex + 1) % playlist.length;
             
             // Pré-carregar próximo vídeo
-            setTimeout(preloadNextVideo, 2000);
+            preloadNextVideo();
           }
         }
         
